@@ -36,8 +36,23 @@ local function get_diff()
   return diff or ""
 end
 
--- Generate improved PR description using CopilotChat
-local function improve_pr_description()
+-- Update PR description using gh pr edit and show output in split
+local function update_pr_description(new_desc)
+  local tmpfile = "/tmp/pr_desc_update.txt"
+  local f = io.open(tmpfile, "w")
+  f:write(new_desc)
+  f:close()
+  -- Update the PR using gh
+  local cmd = string.format("gh pr edit --body-file %s", tmpfile)
+  local handle = io.popen(cmd)
+  local result = handle:read("*a")
+  handle:close()
+  log.log("PR description updated.", "info")
+end
+
+-- Main flow: enhance PR description with CopilotChat
+local function enhance_pr_description()
+  log.log("Enhancing PR description with CopilotChat...", "info")
   local old_desc = get_pr_description()
   if not old_desc then
     log.log("No PR description found.", "warn")
@@ -48,25 +63,25 @@ local function improve_pr_description()
     log.log("No recent changes to analyze.", "warn")
     return
   end
+
   local prompt_template = require("copilotchatassist.prompts.pr_generator").default
   local prompt = prompt_template
     :gsub("<template>", old_desc)
     :gsub("<diff>", diff)
+
   copilot_api.ask(prompt, {
+    headless = true,
     callback = function(response)
       local new_desc = (response and response.content) or response or ""
-      -- Show in buffer for review
-      buffer_utils.open_split_buffer("Improved PR Description", new_desc)
-      log.log("Improved PR description generated.", "info")
-      -- Optionally, save to file
-      local path = "/tmp/improved_pr_description.txt"
-      file_utils.write_file(path, new_desc)
+      update_pr_description(new_desc)
+      -- buffer_utils.open_split_buffer("Improved PR Description", new_desc)
+      log.log("PR description updated", "info")
     end
   })
 end
 
 return {
-  improve_pr_description = improve_pr_description,
+  enhance_pr_description = enhance_pr_description,
 }
 -- local M = {}
 -- local CopilotChat = require("CopilotChat")
