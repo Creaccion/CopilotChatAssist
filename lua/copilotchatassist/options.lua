@@ -3,7 +3,7 @@
 local M = {
   context_dir = vim.fn.expand("~/.copilot_context"),
   system_prompt = require("copilotchatassist.prompts.system").default,
-  model = "gpt-4o",
+  model = "gpt-4.1",
   log_level = vim.log.levels.INFO,
 }
 

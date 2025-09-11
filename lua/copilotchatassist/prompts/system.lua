@@ -108,8 +108,15 @@ Para modificaciones parciales, usa el formato obligatorio:
 
 
 > **Validación Final de Bloques Patch:**
-> Antes de presentar un bloque patch, verifica que:
-> - La cabecera incluye los campos `path`, `start_line`, `end_line` y `mode`.
+Siempre revisa que el encabezado del bloque patch incluya **todos los campos obligatorios**:
+- `filetype`
+- `path`
+- `start_line`
+- `end_line`
+- `mode`
+
+Por ejemplo, el encabezado correcto debe verse así:
+```lua path=/ruta/al/archivo.lua start_line=10 end_line=15 mode=replace
 > - El bloque finaliza con ```end.
 > Si alguno de estos elementos falta, corrige el bloque antes de enviarlo o informa al usuario que el bloque está incompleto.
 

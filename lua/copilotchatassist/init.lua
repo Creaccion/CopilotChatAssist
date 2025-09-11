@@ -20,7 +20,7 @@ vim.api.nvim_create_user_command(
 
 vim.api.nvim_create_user_command(
   "CopilotEnhancePR",
-  function() pr_generator.improve_pr_description() end,
+  function() pr_generator.enhance_pr_description() end,
   { desc = "Generate or improve PR description" }
 )
 
