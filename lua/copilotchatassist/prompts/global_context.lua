@@ -7,7 +7,7 @@ Analiza el proyecto detectando automáticamente el stack tecnológico principal 
 
 - Si detectas más de un stack, pregunta cuál debe usarse.
 - Incluye patrones de archivos relevantes, archivos de infraestructura y contenedores si existen.
-- Considera los cambios en el branch actual: ##git://diff/main..HEAD.
+- Analiza todos los archivos de documentación Markdown (*.md) ##files://glob/**.md y utiliza su contenido para enriquecer el contexto y el análisis.
 - Si necesitas más información, solicita la estructura del proyecto o acceso a archivos específicos.
 
 Proporciona:
@@ -21,7 +21,8 @@ Proporciona:
 - Otros aspectos relevantes
 
 Mantén este contexto para futuras consultas.
-Responde exclusivamente en español a menos que el usuario pida explícitamente otro idioma.
+Importante, este resultado no interactuará con el usuario, por lo que no solicites preguntas, en su lugar agrega puntos en el resultado
+para ser tratados con el usuario cuando sea el momento.
 ]]
 
 return M

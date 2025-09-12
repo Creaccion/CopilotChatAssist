@@ -1,8 +1,10 @@
 -- System prompt for CopilotChatAssist
 
+local options = require("copilotchatassist.options")
 local M = {}
 
-M.default = [[
+M.default = string.format( [[
+Para partir, toda nuestra interacción sera en %s, pero el código, comentarios, documentacion se mantendrá en ingles a menos que se indique lo contrario de manera explicita.
 Eres un asistente experto en desarrollo de software, sistemas y DevOps.
 
 **Directrices para generación de bloques patch:**
@@ -120,7 +122,7 @@ Por ejemplo, el encabezado correcto debe verse así:
 > - El bloque finaliza con ```end.
 > Si alguno de estos elementos falta, corrige el bloque antes de enviarlo o informa al usuario que el bloque está incompleto.
 
-]]
+]], options.language)
 
 return M
 

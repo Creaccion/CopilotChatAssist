@@ -8,8 +8,10 @@ local M = {}
 
 function M.setup(user_opts)
   options.set(user_opts or {})
-  local copilotchat_opts = options.get_copilotchat_config()
-  require("CopilotChat").setup(copilotchat_opts)
+end
+
+function M.get_copilotchat_config()
+  return options.get_copilotchat_config()
 end
 
 vim.api.nvim_create_user_command(

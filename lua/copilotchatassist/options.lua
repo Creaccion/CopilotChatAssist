@@ -2,9 +2,10 @@
 
 local M = {
   context_dir = vim.fn.expand("~/.copilot_context"),
-  system_prompt = require("copilotchatassist.prompts.system").default,
   model = "gpt-4.1",
+  temperature = 0.1,
   log_level = vim.log.levels.INFO,
+  language = "spanish",
 }
 
 function M.set(opts)
@@ -18,20 +19,22 @@ function M.get()
 end
 
 function M.get_copilotchat_config()
+  -- print("options.lua get_copilotchat_config called")
   return {
     model = M.model,
-    system_prompt = M.system_prompt,
- 	window = {
-		layout = "horizontal",
-		width = 150,
-		height = 20,
-		border = "rounded",
-		title = "🤖 AI Assistant",
-		zindex = 100,
-	},
-
+    temperature = M.temperature,       -- Lower = focused, higher = creative
+    system_prompt = require("copilotchatassist.prompts.system").default,
+    window = {
+      layout = "horizontal",
+      width = 150,
+      height = 20,
+      border = "rounded",
+      title = "🤖 AI Assistant",
+      zindex = 100,
+    },
   }
 end
+
 return M
 -- -- Options table for CopilotChat plugin
 -- return {
@@ -61,10 +64,10 @@ return M
 --
 -- **REGLAS ESTRICTAS PARA BLOQUES PATCH**
 --
--- 1. **Formato obligatorio:**  
+-- 1. **Formato obligatorio:**
 --    Todo bloque patch debe estar delimitado por triple backtick (```) al inicio y al final, sin excepción.
 --
--- 2. **Cabecera obligatoria:**  
+-- 2. **Cabecera obligatoria:**
 --    La primera línea del bloque patch debe tener la siguiente estructura, con **todos los campos obligatorios**:
 --    ```
 --    <filetype> path=/ABSOLUTE/PATH start_line=<n> end_line=<m> mode=<insert|replace|append|delete>
@@ -74,10 +77,10 @@ return M
 --    - `end_line`: Línea final del rango a modificar.
 --    - `mode`: Tipo de operación (`insert`, `replace`, `append`, `delete`).
 --
--- 3. **Contenido:**  
+-- 3. **Contenido:**
 --    El contenido del patch debe estar entre los delimitadores, sin incluir información adicional fuera del bloque.
 --
--- 4. **Validación estricta:**  
+-- 4. **Validación estricta:**
 --    - Si falta **cualquier** campo en la cabecera, **rechaza el bloque** y solicita corrección antes de procesar el cambio.
 --    - No generes ni proceses bloques incompletos, ambiguos o con metadatos faltantes.
 --    - Si no tienes la información de líneas (`start_line`, `end_line`), **pregunta al usuario** y espera la respuesta antes de continuar.
@@ -97,7 +100,7 @@ return M
 --    ```
 --    *Este bloque es inválido porque falta `mode=...` en la cabecera.*
 --
--- 7. **Respuesta ante bloque inválido:**  
+-- 7. **Respuesta ante bloque inválido:**
 --    Si recibes un bloque patch sin todos los metadatos, responde:
 --    > "El bloque patch está incompleto. Falta el campo `mode=...` en la cabecera. Por favor, corrígelo y vuelve a enviarlo."
 --
@@ -130,8 +133,8 @@ return M
 --
 -- ---
 --
--- **IMPORTANTE:**  
--- Nunca proceses ni generes bloques patch que no cumplan con la estructura y los metadatos obligatorios.  
+-- **IMPORTANTE:**
+-- Nunca proceses ni generes bloques patch que no cumplan con la estructura y los metadatos obligatorios.
 -- Si el bloque está incompleto, solicita corrección antes de continuar.
 --
 -- ---
