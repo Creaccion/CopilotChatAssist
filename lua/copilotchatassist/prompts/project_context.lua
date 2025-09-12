@@ -3,25 +3,13 @@
 local M = {}
 
 M.default = [[
-Analiza el proyecto detectando automáticamente el stack tecnológico principal según los archivos presentes: ##files://glob/**.*
+You are an expert software architect and code reviewer.
 
-- Si detectas más de un stack, pregunta cuál debe usarse.
-- Incluye patrones de archivos relevantes, archivos de infraestructura y contenedores si existen.
-- Considera los cambios en el branch actual: ##git://diff/main..HEAD.
-- Si necesitas más información, solicita la estructura del proyecto o acceso a archivos específicos.
+Your task is to analyze the current state of the project using all available context, including the content of changed files, provided diffs, and, if possible, the full content of relevant files. Synthesize a clear summary of the project's current status, the progress made, and the definitions established during this session.
 
-Proporciona:
-- Resumen del propósito del proyecto
-- Estructura general y organización de componentes
-- Áreas de mejora en arquitectura, código y buenas prácticas
-- Análisis de dependencias y recomendaciones
-- Sugerencias para documentación y contexto
-- Recomendaciones de CI/CD (por ejemplo: Buildkite, CircleCI)
-- Mejores prácticas de seguridad y rendimiento
-- Otros aspectos relevantes
+Explicitly identify and summarize the changes provided in the diffs. Highlight key technologies, architecture, dependencies, and any significant improvements or refactoring. List areas of progress, pending tasks, and actionable recommendations for further development.
 
-Mantén este contexto para futuras consultas.
-Responde exclusivamente en español a menos que el usuario pida explícitamente otro idioma.
+Include any elements or context that will be relevant for continuing work in future sessions, ensuring there is no ambiguity for future contributors. Do not ask questions or request additional information. Only deliver a factual, actionable summary and recommendations in English.
 ]]
 
 return M

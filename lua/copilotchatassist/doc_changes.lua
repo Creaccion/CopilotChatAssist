@@ -1,35 +1,66 @@
-local log = require("copilotchatassist.utils.log")
+--[[
+doc_changes.lua
 
--- Example doc change logger
-local function log_doc_change(msg)
-  log.log("Doc change: " .. msg)
+This module provides logic to generate documentation for source code files and propose creation of recommended Markdown files if missing.
+It adapts prompts according to file type and project best practices.
+]]
+
+local M = {}
+
+-- List of recommended Markdown files for any project
+local recommended_markdown = {
+  "README.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "CODE_OF_CONDUCT.md",
+  "LICENSE.md"
+}
+
+-- Returns a table of missing recommended Markdown files in the project root
+function M.get_missing_markdown_files(project_root)
+  local missing = {}
+  for _, filename in ipairs(recommended_markdown) do
+    local path = project_root .. "/" .. filename
+    local file = io.open(path, "r")
+    if not file then
+      table.insert(missing, filename)
+    else
+      file:close()
+    end
+  end
+  return missing
+end
+-- Example usage:
+-- local suggestion = require("copilotchatassist.doc_changes").suggest_doc_changes("python", "/path/to/file.py", "/path/to/project/root")
+-- Pass 'suggestion' to your documentation assistant or LLM.
+
+-- Generates a documentation prompt based on filetype
+function M.generate_doc_prompt(filetype, filepath)
+  local prompts = {
+    lua = "Generate LuaDoc-style documentation for all public functions and modules in this file.",
+    python = "Generate docstrings for all public classes and functions using Google style.",
+    ruby = "Generate YARD documentation for all public methods and classes.",
+    elixir = "Generate module and function documentation using Elixir's @moduledoc and @doc.",
+    terraform = "Add comments explaining each resource and variable in Terraform format.",
+    yaml = "Document each Kubernetes manifest with comments describing its purpose.",
+    java = "Generate JavaDoc comments for all public classes and methods.",
+    markdown = "Review and improve the Markdown documentation for clarity and completeness."
+  }
+  return prompts[filetype] or "Generate appropriate documentation for this file type."
 end
 
-return {
-  log_doc_change = log_doc_change,
-}
--- local CopilotChat = require("CopilotChat")
--- local log = require("copilotchatassist.utils.log")
---
--- -- Activar/desactivar log
--- local enable_log = true
---
--- -- Extrae el primer bloque /** ... */ de un string
--- local function extract_java_docblock(text)
---   local docblock = {}
---   local in_block = false
---   for line in text:gmatch("[^\r\n]+") do
---     if not in_block and line:match("^%s*/%*%*") then
---       in_block = true
---     end
---     if in_block then
---       table.insert(docblock, line)
---       if line:match("%*/") then
---         break
---       end
---     end
---   end
---   return #docblock > 0 and table.concat(docblock, "\n") or nil
+-- Main function to suggest documentation changes and missing Markdown files
+function M.suggest_doc_changes(filetype, filepath, project_root)
+  local doc_prompt = M.generate_doc_prompt(filetype, filepath)
+  local missing_md = M.get_missing_markdown_files(project_root)
+  local suggestion = doc_prompt
+  if #missing_md > 0 then
+    suggestion = suggestion .. "\n\nRecommended Markdown files missing: " .. table.concat(missing_md, ", ") .. ". Propose their creation with best-practice content."
+  end
+  return suggestion
+end
+
+return M
 -- end
 --
 -- -- Reemplaza o inserta el bloque de documentación en el buffer

@@ -21,10 +21,12 @@ end
 function M.get_context_paths()
   local context_dir = options.get().context_dir
   file_utils.ensure_dir(context_dir)
+  local project = utils.get_project_name()
   local id = M.get_ticket_id()
   return {
-    requirement = context_dir .. "/" .. id .. "_requirement.txt",
-    synthesis   = context_dir .. "/" .. id .. "_synthesis.txt",
+    requirement     = context_dir .. "/" .. id .. "_requirement.txt",
+    synthesis       = context_dir .. "/" .. id .. "_synthesis.txt",
+    project_context = context_dir .. "/" .. project .. "_project_synthesis.txt"
   }
 end
 
@@ -40,6 +42,12 @@ function M.save_synthesis(content)
   vim.notify("Context synthesis saved: " .. paths.synthesis, vim.log.levels.INFO)
 end
 
+function M.save_project_context(content)
+  local paths = M.get_context_paths()
+  file_utils.write_file(paths.project_context, content)
+  vim.notify("Project context saved: " .. paths.project_context, vim.log.levels.INFO)
+end
+
 function M.load_requirement()
   local paths = M.get_context_paths()
   return file_utils.read_file(paths.requirement)
@@ -50,6 +58,11 @@ function M.load_synthesis()
   return file_utils.read_file(paths.synthesis)
 end
 
+function M.load_project_context()
+  local paths = M.get_context_paths()
+  return file_utils.read_file(paths.project_context)
+end
+
 function M.analyze_project(requirement)
   -- Placeholder for project analysis logic
   vim.notify("Analyzing project with requirement:\n" .. requirement, vim.log.levels.INFO)
@@ -57,39 +70,77 @@ function M.analyze_project(requirement)
 end
 
 function M.copilot_tickets()
-  local branch = utils.get_current_branch()
-  local project = utils.get_project_name()
-  local ticket = branch:match("^([A-Z]+%-%d+)")
-  local id = M.get_ticket_id()
   local paths = M.get_context_paths()
+  print("Contextos: " .. vim.inspect(paths))
+  local requirement = file_utils.read_file(paths.requirement)
+  local ticket_synthesis = file_utils.read_file(paths.synthesis)
+  local project_synthesis = file_utils.read_file(paths.project_context)
 
-  local requirement = M.load_requirement()
-  if requirement and #requirement > 10 then
-    vim.notify("Requirement already exists. Checking if project and ticket context need update...", vim.log.levels.INFO)
-
-    -- Project context check
-    local context_dir = options.get().context_dir
-    local project_synthesis_path = context_dir .. "/project_synthesis.txt"
-    local project_synthesis = file_utils.read_file(project_synthesis_path) or ""
-    M.ask_should_update_context(requirement, project_synthesis, "project")
-
-    -- Ticket context check
-    local ticket_synthesis = M.load_synthesis() or ""
-    M.ask_should_update_context(requirement, ticket_synthesis, "ticket")
-
-    -- Abrir chat con contexto del requerimiento
-    local copilot_api = require("copilotchatassist.copilotchat_api")
-    copilot_api.open({ context = requirement },{})
-  else
+  -- Si no hay requerimiento, solicitarlo al usuario
+  if not (requirement and #requirement > 10) then
+    local branch = utils.get_current_branch()
+    local ticket = branch:match("^([A-Z]+%-%d+)")
     if ticket then
       local jira_url = "https://pagerduty.atlassian.net/browse/" .. ticket
       vim.fn.jobstart({ "open", jira_url }, { detach = true })
-      vim.notify("Jira ticket detected: " .. ticket .. ". Paste the requirement from Jira in the buffer.", vim.log.levels.INFO)
+      vim.notify("Jira ticket detected: " .. ticket .. ". Paste the requirement from Jira in the buffer.",
+        vim.log.levels.INFO)
     else
       vim.notify("No Jira ticket detected. Personal project context will be used.", vim.log.levels.INFO)
     end
     M.input_requirement()
+    return
   end
+
+  -- Si falta síntesis de ticket, generarla
+  if not (ticket_synthesis and #ticket_synthesis > 10) then
+    vim.notify("Generating ticket synthesis...", vim.log.levels.INFO)
+    M.analyze_ticket_context(requirement)
+    ticket_synthesis = file_utils.read_file(paths.synthesis)
+  end
+
+  -- Si falta síntesis de proyecto, generarla y espera a que esté lista antes de continuar
+  if not (project_synthesis and #project_synthesis > 10) then
+    vim.notify("Generating project synthesis...", vim.log.levels.INFO)
+    M.analyze_project_context(requirement)
+    -- Espera a que el contexto global esté listo y vuelve a intentar la combinación
+    vim.defer_fn(function()
+      -- Recarga el contexto global
+      local updated_project_synthesis = file_utils.read_file(paths.project_context)
+      if updated_project_synthesis and #updated_project_synthesis > 10 then
+        -- Vuelve a intentar la combinación de contextos
+        M.copilot_tickets()
+      else
+        vim.notify("Project synthesis not ready yet. Please try again in a moment.", vim.log.levels.WARN)
+      end
+    end, 1500) -- espera 1.5 segundos antes de reintentar
+    return
+  end
+
+  -- Combinar los contextos existentes
+  local context_parts = {}
+  if requirement and #requirement > 10 then
+    table.insert(context_parts, "-- Requirement Context --\n" .. requirement)
+  end
+  if ticket_synthesis and #ticket_synthesis > 10 then
+    table.insert(context_parts, "-- Ticket Synthesis --\n" .. ticket_synthesis)
+  end
+  if project_synthesis and #project_synthesis > 10 then
+    table.insert(context_parts, "-- Project Synthesis --\n" .. project_synthesis)
+  end
+
+  print("# context_parts: " .. #context_parts)
+  print("context_parts: " .. vim.inspect(context_parts))
+  if #context_parts > 0 then
+    print("Pre concat")
+    local full_context = table.concat(context_parts, "\n\n")
+    vim.notify("Loaded combined context from available files.", vim.log.levels.INFO)
+    copilot_api.ask(full_context, {
+    })
+    return
+  end
+
+  vim.notify("No context files found. Please create requirement or synthesis.", vim.log.levels.WARN)
 end
 
 --
@@ -101,7 +152,8 @@ function M.analyze_project_context(requirement)
     headless = true,
     callback = function(response)
       local context_dir = options.get().context_dir
-      local path = context_dir .. "/project_synthesis.txt"
+      local project = utils.get_project_name()
+      local path = context_dir .. "/" .. project .. "_project_synthesis.txt"
       file_utils.write_file(path, response or "")
       vim.notify("Project context synthesis saved: " .. path, vim.log.levels.INFO)
     end
@@ -147,8 +199,8 @@ function M.ask_should_update_context(requirement, synthesis, type)
   local copilot_api = require("copilotchatassist.copilotchat_api")
   local prompt_template = require("copilotchatassist.prompts.context_update").default
   local prompt = prompt_template
-    :gsub("<requirement>", requirement or "")
-    :gsub("<context>", synthesis or "")
+      :gsub("<requirement>", requirement or "")
+      :gsub("<context>", synthesis or "")
   copilot_api.ask(prompt, {
     headless = true,
     callback = function(response)
@@ -165,6 +217,25 @@ function M.ask_should_update_context(requirement, synthesis, type)
     end
   })
 end
+
+-- function M.load_existing_context()
+--   local requirement = M.load_requirement()
+--   local synthesis = M.load_synthesis()
+--   local context_dir = options.get().context_dir
+--   local project = utils.get_project_name()
+--   local project_synthesis_path = context_dir .. "_" .. project .. "_project_synthesis.txt"
+--   local project_synthesis = file_utils.read_file(project_synthesis_path)
+--
+--   if requirement and #requirement > 10 then
+--     table.insert(context_parts, "-- Requirement Context --\n" .. requirement)
+--   end
+--   if ticket_synthesis and #ticket_synthesis > 10 then
+--     table.insert(context_parts, "-- Ticket Synthesis --\n" .. ticket_synthesis)
+--   end
+--   if project_synthesis and #project_synthesis > 10 then
+--     table.insert(context_parts, "-- Project Synthesis --\n" .. project_synthesis)
+--   end
+-- end
 
 return M
 
