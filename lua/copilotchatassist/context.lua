@@ -185,6 +185,21 @@ vim.api.nvim_create_user_command(
 )
 
 vim.api.nvim_create_user_command(
+  "CopilotUpdateContext",
+  function()
+    local requirement = M.load_requirement() or ""
+    local ticket_synthesis = M.load_synthesis() or ""
+    local project_synthesis = M.load_project_context() or ""
+
+    -- Pregunta si se debe actualizar el contexto del ticket
+    M.ask_should_update_context(requirement, ticket_synthesis, "ticket")
+    -- Pregunta si se debe actualizar el contexto global del proyecto
+    M.ask_should_update_context(requirement, project_synthesis, "project")
+  end,
+  { desc = "Ask Copilot if context files should be updated and update them if needed" }
+)
+
+vim.api.nvim_create_user_command(
   "CopilotTicketContext",
   function()
     local requirement = M.load_requirement() or ""
