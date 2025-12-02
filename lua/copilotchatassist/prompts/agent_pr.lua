@@ -1,7 +1,9 @@
 -- Prompt for Pull Request generation
+local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 Please generate a pull request description following this template:
 <template>
 

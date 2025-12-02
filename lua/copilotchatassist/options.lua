@@ -6,6 +6,7 @@ local M = {
   temperature = 0.1,
   log_level = vim.log.levels.INFO,
   language = "spanish",
+  code_language = "english",
 }
 
 function M.set(opts)

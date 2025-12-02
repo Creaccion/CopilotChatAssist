@@ -1,4 +1,5 @@
 -- System prompt for CopilotChatAssist
+local options = require("copilotchatassist.options")
 
 local options = require("copilotchatassist.options")
 local M = {}
