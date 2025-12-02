@@ -15,11 +15,13 @@ Recent changes:
 Your task:
 - Analyze the recent changes and the current PR description.
 - If there are relevant updates, improve and structure the PR description using Markdown.
+- If there are any change in the last commits that affects the actual description, it should be adjusted.
 - Only include new or changed content; if nothing relevant is added, keep the description unchanged.
 - Preserve existing content unless it is outdated or no longer applies.
-- Remove any elements that are no longer relevant.
+- Remove any elements that are no longer relevant or if it's invalid with latests changes.
 - Do not include headers or extra text, only the PR description body.
 - Keep the language in English unless the user requests otherwise.
+- If a mermaid diagram provides more context to the changes, include it
 
 Formatting:
 - Structure the PR description clearly using Markdown (lists, sections, code blocks, etc.).

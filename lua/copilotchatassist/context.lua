@@ -135,8 +135,7 @@ function M.copilot_tickets()
     print("Pre concat")
     local full_context = table.concat(context_parts, "\n\n")
     vim.notify("Loaded combined context from available files.", vim.log.levels.INFO)
-    copilot_api.ask(full_context, {
-    })
+    copilot_api.ask(full_context)
     return
   end
 
