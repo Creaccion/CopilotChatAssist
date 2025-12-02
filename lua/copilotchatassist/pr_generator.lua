@@ -38,7 +38,7 @@ end
 
 -- Update PR description using gh pr edit and show output in split
 local function update_pr_description(new_desc)
-  local tmpfile = "/tmp/pr_desc_update.txt"
+  local tmpfile = "/tmp/pr_desc_update.md"
   local f = io.open(tmpfile, "w")
   f:write(new_desc)
   f:close()

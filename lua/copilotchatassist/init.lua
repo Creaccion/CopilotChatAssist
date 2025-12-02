@@ -1,10 +1,10 @@
+local todos = require("copilotchatassist.todos")
 local utils = require("copilotchatassist.utils")
 local log = require("copilotchatassist.utils.log")
 local options = require("copilotchatassist.options")
 local context = require("copilotchatassist.context")
 local pr_generator = require("copilotchatassist.pr_generator")
 
-local todos = require("copilotchatassist.todos")
 local M = {}
 
 function M.setup(user_opts)
@@ -16,11 +16,22 @@ function M.get_copilotchat_config()
 end
 
 vim.api.nvim_create_user_command(
-  "CopilotTickets",
-  function() context.copilot_tickets() end,
+  "CopilotTicket",
+  function()
+    context.copilot_tickets()
+    todos.generate_todo()
+  end,
   { desc = "Open or create context for current ticket/branch" }
 )
 
+vim.api.nvim_create_user_command(
+  "CopilotRequerimentWork",
+  function()
+    context.copilot_tickets()
+    todos.generate_todo()
+  end,
+  { desc = "Open or create context for current ticket/branch" }
+)
 vim.api.nvim_create_user_command(
   "CopilotEnhancePR",
   function() pr_generator.enhance_pr_description() end,
@@ -29,16 +40,14 @@ vim.api.nvim_create_user_command(
 
 
 -- Register Neovim command to generate TODO from context and requirement
-vim.api.nvim_create_user_command("CopilotGenerateTodo", function(opts)
-  if #opts.fargs ~= 2 then
-    print("Usage: CopilotGenerateTodo <context_path> <requirement_path>")
-    return
-  end
-  local context_path = opts.fargs[1]
-  local requirement_path = opts.fargs[2]
-  todos.generate_todo(context_path, requirement_path)
-  print("TODO file generated for context: " .. context_path)
-end, { nargs = "+" })
+vim.api.nvim_create_user_command("CopilotGenerateTodo", function()
+  todos.generate_todo()
+end, { desc = "Generate TODO" })
+
+-- Register command
+vim.api.nvim_create_user_command("CopilotTodoSplit", function()
+  todos.open_todo_split()
+end, { nargs = 0 })
 
 -- Example integration: When generating context, also generate TODO
 -- Replace this with your actual context generation logic
@@ -46,6 +55,7 @@ function GenerateContextAndTodo(context_path, requirement_path)
   -- ... your context generation logic here ...
   todos.generate_todo(context_path, requirement_path)
 end
+
 return M
 -- local M = {}
 -- local hooks = require('copilotchatassist.hooks')

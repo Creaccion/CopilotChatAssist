@@ -10,14 +10,16 @@ function M.ask(message, opts)
 		opts.system_prompt = options.get().system_prompt or
 		    require("copilotchatassist.prompts.system").default
 	end
-	local CopilotChat = package.loaded["CopilotChat"] and require("CopilotChat")
-	if CopilotChat and type(CopilotChat.ask) == "function" then
-		CopilotChat.ask(message, opts)
+	local ok, CopilotChat = pcall(require, "CopilotChat")
+	if ok and CopilotChat and type(CopilotChat.open) == "function" then
+		local success = pcall(function()
+			CopilotChat.ask(message, opts)
+		end)
+		if not success then
+			vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
+		end
 	else
 		vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
-		if opts.callback then
-			opts.callback(nil)
-		end
 	end
 end
 
@@ -26,9 +28,14 @@ function M.open(context, opts)
 	if not opts.system_prompt then
 		opts.system_prompt = require("copilotchatassist.prompts.system").default
 	end
-	local CopilotChat = package.loaded["CopilotChat"] and require("CopilotChat")
-	if CopilotChat and type(CopilotChat.open) == "function" then
-		CopilotChat.open({ context = context }, opts)
+	local ok, CopilotChat = pcall(require, "CopilotChat")
+	if ok and CopilotChat and type(CopilotChat.open) == "function" then
+		local success = pcall(function()
+			CopilotChat.open({ context = context }, opts)
+		end)
+		if not success then
+			vim.cmd("CopilotChat " .. vim.fn.shellescape(context))
+		end
 	else
 		vim.cmd("CopilotChat " .. vim.fn.shellescape(context))
 	end
