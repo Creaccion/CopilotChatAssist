@@ -106,6 +106,94 @@ function M.copilot_tickets()
   local ticket_synthesis = file_utils.read_file(paths.synthesis)
   local project_synthesis = file_utils.read_file(paths.project_context)
 
+  -- Si no hay ningún archivo de contexto, requerimiento o proyecto, preguntar antes de generar
+  local no_context_files = not (requirement and #requirement > 10)
+    and not (ticket_synthesis and #ticket_synthesis > 10)
+    and not (project_synthesis and #project_synthesis > 10)
+
+  if no_context_files then
+    vim.ui.select({ "Sí", "No" }, {
+      prompt = "¿Desea crear el contexto y los archivos requeridos para este ticket/proyecto?",
+    }, function(choice)
+      if choice == "Sí" then
+        -- Continuar con el flujo normal
+        if not (requirement and #requirement > 10) then
+          local branch = utils.get_current_branch()
+          local ticket = branch:match("^([A-Z]+%-%d+)")
+          if ticket then
+            local jira_url = "https://pagerduty.atlassian.net/browse/" .. ticket
+            vim.fn.jobstart({ "open", jira_url }, { detach = true })
+            vim.notify("Jira ticket detected: " .. ticket .. ". Paste the requirement from Jira in the buffer.",
+              vim.log.levels.INFO)
+          else
+            vim.notify("No Jira ticket detected. Personal project context will be used.", vim.log.levels.INFO)
+          end
+          M.input_requirement()
+          return
+        end
+
+        if not (ticket_synthesis and #ticket_synthesis > 10) then
+          vim.notify("Generating ticket synthesis...", vim.log.levels.INFO)
+          M.analyze_ticket_context(requirement)
+          ticket_synthesis = file_utils.read_file(paths.synthesis)
+        end
+
+        if not (project_synthesis and #project_synthesis > 10) then
+          vim.notify("Generating project synthesis...", vim.log.levels.INFO)
+          M.analyze_project_context(requirement)
+          vim.defer_fn(function()
+            local updated_project_synthesis = file_utils.read_file(paths.project_context)
+            if updated_project_synthesis and #updated_project_synthesis > 10 then
+              M.copilot_tickets()
+            else
+              vim.notify("Project synthesis not ready yet. Please try again in a moment.", vim.log.levels.WARN)
+            end
+          end, 1500)
+          return
+        end
+
+        -- Actualizar contextos existentes antes de combinar
+        local function combine_contexts()
+          local updated_ticket_synthesis = file_utils.read_file(paths.synthesis)
+          local updated_project_synthesis = file_utils.read_file(paths.project_context)
+          local context_parts = {}
+          if requirement and #requirement > 10 then
+            table.insert(context_parts, "-- Requirement Context --\n" .. requirement)
+          end
+          if updated_ticket_synthesis and #updated_ticket_synthesis > 10 then
+            table.insert(context_parts, "-- Ticket Synthesis --\n" .. updated_ticket_synthesis)
+          end
+          if updated_project_synthesis and #updated_project_synthesis > 10 then
+            table.insert(context_parts, "-- Project Synthesis --\n" .. updated_project_synthesis)
+          end
+
+          print("# context_parts: " .. #context_parts)
+          print("context_parts: " .. vim.inspect(context_parts))
+          if #context_parts > 0 then
+            print("Pre concat")
+            local full_context = table.concat(context_parts, "\n\n")
+            vim.notify("Loaded combined context from available files.", vim.log.levels.INFO)
+            copilot_api.ask(full_context)
+            return
+          end
+
+          vim.notify("No context files found. Please create requirement or synthesis.", vim.log.levels.WARN)
+        end
+
+        -- Actualiza ticket y proyecto en serie, luego combina
+        M.update_context_with_progress(requirement, paths.synthesis, function()
+          M.update_context_with_progress(requirement, paths.project_context, function()
+            combine_contexts()
+          end)
+        end)
+      else
+        vim.notify("Context creation cancelled by user.", vim.log.levels.INFO)
+        return
+      end
+    end)
+    return
+  end
+
   -- Si no hay requerimiento, solicitarlo al usuario
   if not (requirement and #requirement > 10) then
     local branch = utils.get_current_branch()
@@ -179,6 +267,8 @@ function M.copilot_tickets()
     end)
   end)
 end
+
+
 
 -- Analyze and store global project context
 function M.analyze_project_context(requirement)

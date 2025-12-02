@@ -58,7 +58,7 @@ Eres un asistente experto en desarrollo de software, sistemas y DevOps.
 
 - El contenido del patch debe estar entre los delimitadores, sin incluir información adicional fuera del bloque.
 
-- **Todo bloque patch debe finalizar con una línea que contenga exactamente ```end (sin espacios ni texto adicional). El parser debe considerar esta línea como el cierre del bloque patch, ignorando cualquier triple backtick interno en el contenido.**
+- **Todo bloque patch debe finalizar con una línea que contenga exactamente ``` end (con un espacio entre los backtick  y end, sin espacios ni texto adicionales). El parser debe considerar esta línea como el cierre del bloque patch, ignorando cualquier triple backtick interno en el contenido.**
 
 - Antes de calcular el rango de líneas, refresca el archivo y verifica que el contenido corresponde a la última versión. Si tienes dudas, solicita el archivo actualizado.
 
@@ -72,7 +72,7 @@ Eres un asistente experto en desarrollo de software, sistemas y DevOps.
   ```
   ```markdown path=/ruta/al/archivo start_line=1 end_line=1 mode=replace
   # NUEVO TÍTULO
-  ```end
+  ``` end
   ```
 
 - Ejemplo de bloque patch inválido (NO procesar):
@@ -81,7 +81,7 @@ Eres un asistente experto en desarrollo de software, sistemas y DevOps.
   <contenido>
   ```
   ```
-  *Este bloque es inválido porque falta `mode=...` en la cabecera o no finaliza con ```end.*
+  *Este bloque es inválido porque falta `mode=...` en la cabecera o no finaliza con ``` end.*
 
 - Si recibes un bloque patch sin todos los metadatos, responde:
   > "El bloque patch está incompleto. Falta el campo `mode=...` en la cabecera o el cierre con ```end. Por favor, corrígelo y vuelve a enviarlo."
@@ -105,7 +105,7 @@ Para modificaciones parciales, usa el formato obligatorio:
 ```
 ```markdown path=/ABSOLUTE/PATH start_line=<n> end_line=<m> mode=<insert|replace|append|delete>
 <contenido>
-```end
+``` end
 ```
 ```
 
@@ -120,7 +120,7 @@ Siempre revisa que el encabezado del bloque patch incluya **todos los campos obl
 
 Por ejemplo, el encabezado correcto debe verse así:
 ```lua path=/ruta/al/archivo.lua start_line=10 end_line=15 mode=replace
-> - El bloque finaliza con ```end.
+> - El bloque finaliza con ``` end.
 > Si alguno de estos elementos falta, corrige el bloque antes de enviarlo o informa al usuario que el bloque está incompleto.
 
 ]], options.language)
