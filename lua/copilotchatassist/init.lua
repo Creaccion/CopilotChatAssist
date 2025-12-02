@@ -30,15 +30,15 @@ vim.api.nvim_create_user_command(
 
 -- Register Neovim command to generate TODO from context and requirement
 vim.api.nvim_create_user_command("CopilotGenerateTodo", function(opts)
+  if #opts.fargs ~= 2 then
+    print("Usage: CopilotGenerateTodo <context_path> <requirement_path>")
+    return
+  end
   local context_path = opts.fargs[1]
   local requirement_path = opts.fargs[2]
-  if context_path and requirement_path then
-    todos.generate_todo(context_path, requirement_path)
-    print("TODO file generated for context: " .. context_path)
-  else
-    print("Usage: CopilotGenerateTodo <context_path> <requirement_path>")
-  end
-end, { nargs = "2" })
+  todos.generate_todo(context_path, requirement_path)
+  print("TODO file generated for context: " .. context_path)
+end, { nargs = "+" })
 
 -- Example integration: When generating context, also generate TODO
 -- Replace this with your actual context generation logic
