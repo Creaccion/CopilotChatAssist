@@ -16,6 +16,7 @@ Usa el siguiente contexto global para actualizar el archivo TODO del ticket.
 - Formato: lista única en Markdown con tags de sección y prioridad.
 - Para el status, usar palabras solamente, estandarizandolas para poder parsearlas posteriormente, DONE, IN PROGRESS, TODO
 - Que el orden sea, de arriba a abajo: - in progress, todo, done, y en segundo nivel la prioridad, arriba lo mas prioritario
+- la prioridad debe ser numerica de 1 a 5, siendo 1 lo mas importante
 
 - usemos formato MD y con tabla, teniendo las columnas
   - #  | status | Priority | category | title | description

@@ -36,6 +36,25 @@ function M.get_copilotchat_config()
   }
 end
 
+-- Default highlight groups for TODO priorities (can be overridden by user)
+local todo_highlights = {
+  [1] = "CopilotTodoPriority1",
+  [2] = "CopilotTodoPriority2",
+  [3] = "CopilotTodoPriority3",
+  [4] = "CopilotTodoPriority4",
+  [5] = "CopilotTodoPriority5",
+}
+
+-- Setup default highlights if not already defined
+vim.api.nvim_command('highlight default CopilotTodoPriority1 guifg=#ff5555 gui=bold')
+vim.api.nvim_command('highlight default CopilotTodoPriority2 guifg=#ffaf00 gui=bold')
+vim.api.nvim_command('highlight default CopilotTodoPriority3 guifg=#ffd700 gui=bold')
+vim.api.nvim_command('highlight default CopilotTodoPriority4 guifg=#61afef gui=bold')
+vim.api.nvim_command('highlight default CopilotTodoPriority5 guifg=#888888 gui=italic')
+
+
+M.todo_highlights = todo_highlights
+
 return M
 -- -- Options table for CopilotChat plugin
 -- return {

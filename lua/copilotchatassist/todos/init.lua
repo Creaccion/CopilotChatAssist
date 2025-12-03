@@ -131,20 +131,174 @@ local function extract_icon(status)
 end
 
 -- Refresh/reload the TODO split
-local function reload_todo_split(bufnr)
+local function reload_todo_split()
+  vim.notify("[CopilotChatAssist][DEBUG] reload_todo_split called", vim.log.levels.DEBUG)
+
+  if not todo_split or not vim.api.nvim_win_is_valid(todo_split.win) then
+    vim.notify("[CopilotChatAssist][DEBUG] todo_split is nil or window is invalid", vim.log.levels.DEBUG)
+    return
+  end
+
+  local buf = todo_split.buf
+  local lines = {}
+  local highlights = {}
+
+  -- Priority icons (①-⑤)
+  local priority_icons = { "①", "②", "③", "④", "⑤" }
+
+  -- Status icons
+  local status_icons = {
+    done = "[✔]",
+    pending = "[ ]",
+    ["in progress"] = "[~]",
+    ["in_progress"] = "[~]",
+    ["progress"] = "[~]",
+  }
+
+  if not todo_tasks then
+    vim.notify("[CopilotChatAssist][DEBUG] todo_tasks is nil", vim.log.levels.DEBUG)
+  elseif #todo_tasks == 0 then
+    vim.notify("[CopilotChatAssist][DEBUG] todo_tasks is empty", vim.log.levels.DEBUG)
+  end
+
+  for i, task in ipairs(todo_tasks or {}) do
+    local priority = tonumber(task.priority) or 3
+    if priority < 1 or priority > 5 then
+      priority = 3
+    end
+    local priority_icon = priority_icons[priority]
+
+    -- Determine status icon
+    local status = (task.status or "pending"):lower()
+    local status_icon = status_icons[status] or "[ ]"
+
+    -- Compose line: <priority_icon> <status_icon> <title>
+    local line = string.format("%s %s %s", priority_icon, status_icon, task.title or "")
+    table.insert(lines, line)
+
+    -- Highlight the title according to priority
+    local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
+    local title_end = #line
+    local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
+    if hl_group ~= "" then
+      table.insert(highlights, {
+        line = i - 1,
+        col_start = title_start,
+        col_end = title_end,
+        group = hl_group,
+      })
+    end
+
+    vim.notify(string.format(
+      "[CopilotChatAssist][DEBUG] Task %d: priority=%s, status=%s, title=%s, line='%s'",
+      i, tostring(priority), tostring(status), tostring(task.title), line
+    ), vim.log.levels.DEBUG)
+  end
+
+  vim.api.nvim_buf_set_option(buf, "modifiable", true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+
+  -- Clear existing highlights
+  vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
+
+  -- Apply highlights
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(
+      buf,
+      -1,
+      hl.group,
+      hl.line,
+      hl.col_start,
+      hl.col_end
+    )
+  end
+
+  vim.notify(string.format(
+    "[CopilotChatAssist][DEBUG] Rendered %d tasks, %d highlights",
+    #lines, #highlights
+  ), vim.log.levels.DEBUG)
+end
+
+-- Refresh/reload the TODO split
+local function reload_todo_split(buf)
+  vim.notify("[CopilotChatAssist][DEBUG] reload_todo_split called", vim.log.levels.DEBUG)
+
+  buf = buf or vim.api.nvim_get_current_buf()
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    vim.notify("[CopilotChatAssist][DEBUG] Buffer is nil or invalid", vim.log.levels.DEBUG)
+    return
+  end
+
   local todo_path = paths.todo_path
   local tasks = parse_todo_markdown(todo_path)
-  local display_lines = {}
-  for _, task in ipairs(tasks) do
-    local icon = extract_icon(task.status)
-    table.insert(display_lines, string.format("%-3s %s", icon, task.title))
+  local lines = {}
+  local highlights = {}
+
+  -- Priority icons (①-⑤)
+  local priority_icons = { "①", "②", "③", "④", "⑤" }
+
+  -- Status icons
+  local status_icons = {
+    done = "[✔]",
+    pending = "[ ]",
+    ["in progress"] = "[~]",
+    ["in_progress"] = "[~]",
+    progress = "[~]",
+  }
+
+  for i, task in ipairs(tasks or {}) do
+    local priority = tonumber(task.priority) or 3
+    if priority < 1 or priority > 5 then
+      priority = 3
+    end
+    local priority_icon = priority_icons[priority]
+
+    -- Determine status icon
+    local status = (task.status or "pending"):lower()
+    local status_icon = status_icons[status] or "[ ]"
+
+    -- Compose line: <priority_icon> <status_icon> <title>
+    local line = string.format("%s %s %s", priority_icon, status_icon, task.title or "")
+    table.insert(lines, line)
+
+    -- Highlight the title according to priority
+    local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
+    local title_end = #line
+    local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
+    if hl_group ~= "" then
+      table.insert(highlights, {
+        line = i - 1,
+        col_start = title_start,
+        col_end = title_end,
+        group = hl_group,
+      })
+    end
   end
-  -- Add blank line and legend at the bottom
-  table.insert(display_lines, "")
-  table.insert(display_lines, "[Enter] Show details  |  [r] Refresh  |  [Esc] Close popup")
-  api.nvim_buf_set_option(bufnr, "modifiable", true)
-  api.nvim_buf_set_lines(bufnr, 0, -1, false, display_lines)
-  api.nvim_buf_set_option(bufnr, "modifiable", false)
+
+  vim.api.nvim_buf_set_option(buf, "modifiable", true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+
+  -- Clear existing highlights
+  vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
+
+  -- Apply highlights
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(
+      buf,
+      -1,
+      hl.group,
+      hl.line,
+      hl.col_start,
+      hl.col_end
+    )
+  end
+
+  vim.notify(string.format(
+    "[CopilotChatAssist][DEBUG] Rendered %d tasks, %d highlights",
+    #lines, #highlights
+  ), vim.log.levels.DEBUG)
 end
 
 -- Main: open or reuse split for TODOs
@@ -190,7 +344,7 @@ function M.open_todo_split()
   api.nvim_buf_set_keymap(bufnr, "n", "r", "", {
     noremap = true,
     callback = function()
-      vim.notify("Refreshig TODO " .. paths.todo_path, vim.log.levels.INFO)
+      vim.notify("Refreshing TODO " .. todo_path, vim.log.levels.INFO)
       require("copilotchatassist.todos").generate_todo(function()
         reload_todo_split(bufnr)
       end)
