@@ -2,6 +2,7 @@ local buffer_utils = require("copilotchatassist.utils.buffer")
 local log = require("copilotchatassist.utils.log")
 local file_utils = require("copilotchatassist.utils.file")
 local copilot_api = require("copilotchatassist.copilotchat_api")
+local i18n = require("copilotchatassist.i18n")
 
 -- Get PR description from GitHub using gh CLI
 local function get_pr_description()
@@ -38,50 +39,129 @@ end
 
 -- Update PR description using gh pr edit and show output in split
 local function update_pr_description(new_desc)
-  local tmpfile = "/tmp/pr_desc_update.md"
-  local f = io.open(tmpfile, "w")
-  f:write(new_desc)
+  -- Imprimir detalles de depuración
+  log.debug("Actualizando descripción del PR")
+  log.debug("Longitud de la nueva descripción: " .. tostring(#new_desc) .. " caracteres")
+
+  -- Usar una ruta temporal única para evitar conflictos
+  local tmpfile = os.tmpname()
+  log.debug("Usando archivo temporal: " .. tmpfile)
+
+  -- Escribir contenido con manejo de errores
+  local f, err = io.open(tmpfile, "w")
+  if not f then
+    log.error("Error al abrir el archivo temporal: " .. tostring(err))
+    return false
+  end
+
+  local write_success, write_err = f:write(new_desc)
+  if not write_success then
+    log.error("Error al escribir en el archivo temporal: " .. tostring(write_err))
+    f:close()
+    os.remove(tmpfile)
+    return false
+  end
+
   f:close()
-  -- Update the PR using gh
-  local cmd = string.format("gh pr edit --body-file %s", tmpfile)
-  local handle = io.popen(cmd)
+
+  -- Update the PR using gh with better error handling
+  local cmd = string.format("gh pr edit --body-file '%s' 2>&1", tmpfile)
+  log.debug("Ejecutando comando: " .. cmd)
+
+  local handle, cmd_err = io.popen(cmd)
+  if not handle then
+    log.error("Error al ejecutar gh pr edit: " .. tostring(cmd_err))
+    os.remove(tmpfile)
+    return false
+  end
+
   local result = handle:read("*a")
-  handle:close()
-  log.log("PR description updated.", "info")
+  local close_status = handle:close()
+
+  -- Limpiar archivo temporal
+  os.remove(tmpfile)
+
+  -- Verificar resultado
+  if not close_status then
+    log.error("Error al actualizar la descripción del PR. Salida del comando:")
+    log.error(result)
+    return false
+  end
+
+  log.info("PR description updated successfully.")
+  log.debug("Salida del comando: " .. result)
+  return true
 end
 
 -- Main flow: enhance PR description with CopilotChat
 local function enhance_pr_description()
-  log.log("Enhancing PR description with CopilotChat...", "info")
+  log.info("Enhancing PR description with CopilotChat...")
+
+  -- Obtener la descripción actual del PR
   local old_desc = get_pr_description()
   if not old_desc then
-    log.log("No PR description found.", "warn")
-    return
-  end
-  local diff = get_diff()
-  if diff == "" then
-    log.log("No recent changes to analyze.", "warn")
+    log.warn("No PR description found. Make sure you have an active PR and GitHub CLI is properly configured.")
+    vim.notify("No se encontró descripción del PR. Asegúrate de tener un PR activo y que GitHub CLI esté configurado correctamente.", vim.log.levels.WARN)
     return
   end
 
+  -- Obtener los cambios recientes
+  local diff = get_diff()
+  if diff == "" then
+    log.warn("No recent changes to analyze in the current branch.")
+    vim.notify("No se encontraron cambios recientes para analizar en la rama actual.", vim.log.levels.WARN)
+    return
+  end
+
+  log.debug("Descripción actual del PR encontrada, longitud: " .. #old_desc .. " caracteres")
+  log.debug("Diff encontrado, longitud: " .. #diff .. " caracteres")
+
+  -- Preparar el prompt para Copilot
   local prompt_template = require("copilotchatassist.prompts.pr_generator").default
   local prompt = prompt_template
     :gsub("<template>", old_desc)
     :gsub("<diff>", diff)
 
+  log.debug("Solicitando mejora de la descripción a CopilotChat...")
+
+  -- Notificar al usuario
+  vim.notify("Mejorando descripción del PR con CopilotChat...", vim.log.levels.INFO)
+
+  -- Llamar a CopilotChat
   copilot_api.ask(prompt, {
     headless = true,
     callback = function(response)
       local new_desc = (response and response.content) or response or ""
-      update_pr_description(new_desc)
-      -- buffer_utils.open_split_buffer("Improved PR Description", new_desc)
-      log.log("PR description updated", "info")
+
+      if new_desc == "" then
+        log.error("No se recibió respuesta válida de CopilotChat")
+        vim.notify("Error: No se pudo generar una descripción mejorada del PR", vim.log.levels.ERROR)
+        return
+      end
+
+      log.debug("Nueva descripción recibida de CopilotChat, longitud: " .. #new_desc .. " caracteres")
+
+      -- Intentar actualizar la descripción
+      local success = update_pr_description(new_desc)
+
+      if success then
+        vim.notify("Descripción del PR actualizada con éxito", vim.log.levels.INFO)
+      else
+        vim.notify("No se pudo actualizar la descripción del PR. Revisa los logs para más detalles.", vim.log.levels.ERROR)
+      end
+    end,
+    error_callback = function(err)
+      log.error("Error al solicitar la mejora de la descripción: " .. tostring(err))
+      vim.notify("Error al mejorar la descripción del PR: " .. tostring(err), vim.log.levels.ERROR)
     end
   })
+
+  log.info("Solicitud de mejora de descripción enviada a CopilotChat")
 end
 
 return {
   enhance_pr_description = enhance_pr_description,
+  enhance_pr = enhance_pr_description,  -- Alias para compatibilidad con el comando existente
 }
 -- local M = {}
 -- local CopilotChat = require("CopilotChat")

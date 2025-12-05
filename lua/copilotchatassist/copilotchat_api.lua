@@ -31,7 +31,10 @@ local function add_to_history(request, response)
 
     if patch_count > 0 then
       vim.defer_fn(function()
-        vim.notify(string.format("Se encontraron %d patches en la respuesta. Usa :CopilotPatchesWindow para verlos.", patch_count), vim.log.levels.INFO)
+        log.info({
+          english = string.format("Found %d patches in the response. Use :CopilotPatchesWindow to view them.", patch_count),
+          spanish = string.format("Se encontraron %d patches en la respuesta. Usa :CopilotPatchesWindow para verlos.", patch_count)
+        })
       end, 500) -- Pequeño retraso para que la notificación sea visible después de la respuesta
     end
   end
@@ -45,12 +48,32 @@ function M.ask(message, opts)
         require("copilotchatassist.prompts.system").default
   end
 
+  -- Activar el modo debug si no está ya activado
+  vim.g.copilotchatassist_debug = true
+
   -- Registrar la solicitud (protegido contra errores)
   pcall(function()
     if log and log.debug then
-      log.debug("Sending request to CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "..."))
+      log.debug({
+        english = "Sending request to CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "..."),
+        spanish = "Enviando solicitud a CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "...")
+      })
     end
   end)
+
+  -- Guardar el prompt completo para depuración
+  local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+  vim.fn.mkdir(debug_dir, "p")
+  local debug_file = debug_dir .. "/last_prompt.txt"
+  local file = io.open(debug_file, "w")
+  if file then
+    file:write(message)
+    file:close()
+    log.debug({
+      english = "Complete prompt saved to " .. debug_file,
+      spanish = "Prompt completo guardado en " .. debug_file
+    })
+  end
 
   -- Si se proporciona una función de callback, envolvemos la original para almacenar el historial
   local original_callback = opts.callback
@@ -67,19 +90,112 @@ function M.ask(message, opts)
   end
 
   local ok, CopilotChat = pcall(require, "CopilotChat")
-  if ok and CopilotChat and type(CopilotChat.ask) == "function" then
-    local success = pcall(function()
-      CopilotChat.ask(message, opts)
-    end)
-    if not success then
-      vim.notify("Error al llamar a CopilotChat.ask directamente, intentando con comando", vim.log.levels.WARN)
+
+  if ok and CopilotChat then
+    log.debug({
+      english = "CopilotChat loaded successfully",
+      spanish = "CopilotChat cargado correctamente"
+    })
+
+    -- Verificar que CopilotChat.ask sea una función
+    if type(CopilotChat.ask) == "function" then
+      log.debug({
+        english = "CopilotChat.ask is a function",
+        spanish = "CopilotChat.ask es una función"
+      })
+
+      local success, err = pcall(function()
+        log.debug({
+          english = "Attempting to call CopilotChat.ask",
+          spanish = "Intentando llamar a CopilotChat.ask"
+        })
+
+        -- Envoltura adicional para detectar respuestas vacías
+        local original_callback = opts.callback
+        if original_callback then
+          opts.callback = function(response)
+            -- Registrar detalles de la respuesta
+            if response == nil then
+              log.error("CopilotChat.ask devolvió respuesta nil")
+
+              -- Guardar estado de debug
+              local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+              vim.fn.mkdir(debug_dir, "p")
+              local debug_file = debug_dir .. "/error_nil_response.txt"
+              local file = io.open(debug_file, "w")
+              if file then
+                file:write("Error: Respuesta nil recibida\n")
+                file:write("Timestamp: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n")
+                file:write("Prompt: " .. message:sub(1, 500) .. "...\n")
+                file:close()
+              end
+            elseif type(response) == "string" and response == "" then
+              log.error("CopilotChat.ask devolvió respuesta vacía (string vacío)")
+
+              -- Guardar estado de debug
+              local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+              vim.fn.mkdir(debug_dir, "p")
+              local debug_file = debug_dir .. "/error_empty_response.txt"
+              local file = io.open(debug_file, "w")
+              if file then
+                file:write("Error: Respuesta vacía recibida\n")
+                file:write("Timestamp: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n")
+                file:write("Prompt: " .. message:sub(1, 500) .. "...\n")
+                file:close()
+              end
+            else
+              log.debug({
+                english = "Response received correctly, length: " .. (type(response) == "string" and #response or "not a string"),
+                spanish = "Respuesta recibida correctamente, longitud: " .. (type(response) == "string" and #response or "no es string")
+              })
+
+              -- Guardar respuesta raw para depuración
+              local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+              vim.fn.mkdir(debug_dir, "p")
+              local raw_file = debug_dir .. "/response_raw.txt"
+              local file = io.open(raw_file, "w")
+              if file then
+                if type(response) == "string" then
+                  file:write(response)
+                else
+                  file:write(vim.inspect(response))
+                end
+                file:close()
+                log.debug({
+                  english = "Raw response saved to " .. raw_file,
+                  spanish = "Respuesta raw guardada en " .. raw_file
+                })
+              end
+            end
+
+            -- Llamar al callback original
+            original_callback(response)
+          end
+        end
+
+        CopilotChat.ask(message, opts)
+      end)
+
+      if not success then
+        log.error("Error al llamar a CopilotChat.ask: " .. tostring(err))
+        vim.notify("Error al llamar a CopilotChat.ask: " .. tostring(err), vim.log.levels.ERROR)
+
+        -- Plan B: Usar el comando directamente
+        vim.notify("Intentando con el comando CopilotChat", vim.log.levels.WARN)
+        vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
+      end
+    else
+      log.error("CopilotChat.ask no es una función: " .. type(CopilotChat.ask))
+      vim.notify("CopilotChat.ask no es una función", vim.log.levels.ERROR)
+
+      -- Plan B: Usar el comando directamente
+      vim.notify("Intentando con el comando CopilotChat", vim.log.levels.WARN)
       vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
-      -- No podemos registrar la respuesta si usamos el comando
     end
   else
-    vim.notify("Usando comando CopilotChat", vim.log.levels.INFO)
+    log.error("No se pudo cargar CopilotChat: " .. tostring(CopilotChat))
+    vim.notify("No se pudo cargar CopilotChat, usando comando directo", vim.log.levels.WARN)
     vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
-    -- No podemos registrar la respuesta si usamos el comando
   end
 end
 

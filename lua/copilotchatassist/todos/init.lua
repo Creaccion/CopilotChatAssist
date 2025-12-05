@@ -9,6 +9,7 @@ local options = require("copilotchatassist.options")
 local utils = require("copilotchatassist.utils")
 local log = require("copilotchatassist.utils.log")
 local copilot_api = require("copilotchatassist.copilotchat_api")
+local i18n = require("copilotchatassist.i18n")
 
 -- Almacena el estado de la visualización de TODOs
 M.state = {
@@ -58,11 +59,27 @@ local function parse_todo_markdown(path)
   local tasks = {}
   local lines = {}
   local f = io.open(path, "r")
-  if not f then return tasks end
+  if not f then
+    log.debug({
+      english = "Could not open TODO file: " .. path,
+      spanish = "No se pudo abrir el archivo TODO: " .. path
+    })
+    return tasks
+  end
+
   for line in f:lines() do
     table.insert(lines, line)
   end
   f:close()
+
+  if #lines == 0 then
+    log.debug({
+      english = "TODO file is empty: " .. path,
+      spanish = "El archivo TODO está vacío: " .. path
+    })
+    return tasks
+  end
+
   -- Find table header
   local header_idx = nil
   for i, line in ipairs(lines) do
@@ -71,15 +88,25 @@ local function parse_todo_markdown(path)
       break
     end
   end
-  if not header_idx then return tasks end
+
+  if not header_idx then
+    log.debug({
+      english = "Could not find table header in TODO file",
+      spanish = "No se pudo encontrar el encabezado de la tabla en el archivo TODO"
+    })
+    return tasks
+  end
+
   -- Parse rows
   for i = header_idx + 2, #lines do
     local row = lines[i]
     if not row:match("|") or row:match("^%s*<!--") then break end
+
     local cols = {}
     for col in row:gmatch("|([^|]*)") do
       table.insert(cols, vim.trim(col))
     end
+
     if #cols >= 5 then
       table.insert(tasks, {
         number = cols[1],
@@ -90,8 +117,19 @@ local function parse_todo_markdown(path)
         description = cols[6] or "",
         raw = row,
       })
+    else
+      log.debug({
+        english = "Malformed TODO row: " .. row,
+        spanish = "Fila de TODO mal formada: " .. row
+      })
     end
   end
+
+  log.debug({
+    english = "Parsed " .. #tasks .. " tasks from TODO file",
+    spanish = "Se analizaron " .. #tasks .. " tareas del archivo TODO"
+  })
+
   return tasks
 end
 
@@ -117,16 +155,41 @@ local function extract_todo_title(lines)
 end
 
 local function show_task_details(task)
+  local lang = i18n.get_current_language()
+  local labels = {}
+
+  if lang == "spanish" then
+    labels = {
+      title = "Detalles de la Tarea",
+      number = "Número:     ",
+      status = "Estado:     ",
+      priority = "Prioridad:  ",
+      category = "Categoría:  ",
+      task_title = "Título:     ",
+      description = "Descripción:"
+    }
+  else
+    labels = {
+      title = "Task Details",
+      number = "Number:     ",
+      status = "Status:     ",
+      priority = "Priority:   ",
+      category = "Category:   ",
+      task_title = "Title:      ",
+      description = "Description:"
+    }
+  end
+
   local lines = {
-    "Task Details",
+    labels.title,
     "",
-    "Number:      " .. (task.number or ""),
-    "Status:      " .. (task.status or ""),
-    "Priority:    " .. (task.priority or ""),
-    "Category:    " .. (task.category or ""),
-    "Title:       " .. (task.title or ""),
+    labels.number .. (task.number or ""),
+    labels.status .. (task.status or ""),
+    labels.priority .. (task.priority or ""),
+    labels.category .. (task.category or ""),
+    labels.task_title .. (task.title or ""),
     "",
-    "Description:",
+    labels.description,
     (task.description or ""),
   }
   local width = 60
@@ -161,12 +224,18 @@ end
 
 -- Actualizar la visualización de TODOs en el buffer
 local function reload_todo_split(buf)
-  vim.notify("[CopilotChatAssist][DEBUG] reload_todo_split called", vim.log.levels.DEBUG)
+  log.debug({
+    english = "reload_todo_split called",
+    spanish = "reload_todo_split llamado"
+  })
 
   -- Si se proporciona el estado de la ventana split, usar su buffer
   if M.state.todo_split and not buf then
     if not vim.api.nvim_win_is_valid(M.state.todo_split.win) then
-      vim.notify("[CopilotChatAssist][DEBUG] todo_split window is invalid", vim.log.levels.DEBUG)
+      log.debug({
+        english = "todo_split window is invalid",
+        spanish = "Ventana todo_split inválida"
+      })
       return
     end
     buf = M.state.todo_split.buf
@@ -176,7 +245,10 @@ local function reload_todo_split(buf)
   end
 
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
-    vim.notify("[CopilotChatAssist][DEBUG] Buffer is nil or invalid", vim.log.levels.DEBUG)
+    log.debug({
+      english = "Buffer is nil or invalid",
+      spanish = "Buffer es nulo o inválido"
+    })
     return
   end
 
@@ -203,8 +275,17 @@ local function reload_todo_split(buf)
   }
 
   if not tasks or #tasks == 0 then
-    vim.notify("[CopilotChatAssist][DEBUG] No tasks found", vim.log.levels.DEBUG)
-    table.insert(lines, "No hay tareas disponibles. Usa 'r' para actualizar.")
+    log.debug({
+      english = "No tasks found",
+      spanish = "No se encontraron tareas"
+    })
+    -- Usar i18n para obtener el mensaje en el idioma configurado
+    local message = i18n.t("todo.no_tasks_available", {})
+    if not message or message == "todo.no_tasks_available" then
+      -- Si no se encuentra la traducción, usar fallback directo
+      message = i18n.get_current_language() == "spanish" and "No hay tareas disponibles. Usa 'r' para actualizar." or "No tasks available. Use 'r' to refresh."
+    end
+    table.insert(lines, message)
   else
     for i, task in ipairs(tasks) do
       local priority = tonumber(task.priority) or 3
@@ -255,10 +336,10 @@ local function reload_todo_split(buf)
     )
   end
 
-  vim.notify(string.format(
-    "[CopilotChatAssist][DEBUG] Rendered %d tasks, %d highlights",
-    #lines, #highlights
-  ), vim.log.levels.DEBUG)
+  log.debug({
+    english = string.format("Rendered %d tasks, %d highlights", #lines, #highlights),
+    spanish = string.format("Se renderizaron %d tareas, %d resaltados", #lines, #highlights)
+  })
 end
 
 -- Filtrar tareas por estado
@@ -276,7 +357,10 @@ function M.filter_tasks_by_status(status, buf)
     end
   end
 
-  M.display_filtered_tasks(filtered_tasks, buf, "Filtrado por estado: " .. status)
+  local title = i18n.get_current_language() == "spanish"
+    and ("Filtrado por estado: " .. status)
+    or ("Filtered by status: " .. status)
+  M.display_filtered_tasks(filtered_tasks, buf, title)
 end
 
 -- Filtrar tareas por prioridad
@@ -296,7 +380,10 @@ function M.filter_tasks_by_priority(priority, buf)
     end
   end
 
-  M.display_filtered_tasks(filtered_tasks, buf, "Filtrado por prioridad: " .. priority)
+  local title = i18n.get_current_language() == "spanish"
+    and ("Filtrado por prioridad: " .. priority)
+    or ("Filtered by priority: " .. priority)
+  M.display_filtered_tasks(filtered_tasks, buf, title)
 end
 
 -- Mostrar tareas filtradas
@@ -321,7 +408,9 @@ function M.display_filtered_tasks(tasks, buf, title)
   }
 
   if #tasks == 0 then
-    table.insert(lines, "No se encontraron tareas con este filtro.")
+    table.insert(lines, i18n.get_current_language() == "spanish"
+      and "No se encontraron tareas con este filtro."
+      or "No tasks found with this filter.")
   else
     for i, task in ipairs(tasks) do
       local priority = tonumber(task.priority) or 3
@@ -373,7 +462,10 @@ function M.display_filtered_tasks(tasks, buf, title)
   end
 
   -- Añadir nota sobre cómo volver a la vista completa
-  vim.notify("Use 'r' para volver a la vista completa", vim.log.levels.INFO)
+  log.info({
+    english = "Use 'r' to return to the full view",
+    spanish = "Use 'r' para volver a la vista completa"
+  })
 end
 
 -- Cambiar el estado de una tarea
@@ -394,7 +486,10 @@ function M.change_task_status(task_index, new_status, buf)
   if task_index > 0 and task_index <= #tasks then
     local task = tasks[task_index]
     if not task or not task.raw then
-      vim.notify("No se pudo encontrar la tarea o formato incorrecto", vim.log.levels.ERROR)
+      log.error({
+        english = "Could not find task or incorrect format",
+        spanish = "No se pudo encontrar la tarea o formato incorrecto"
+      })
       return
     end
 
@@ -408,7 +503,10 @@ function M.change_task_status(task_index, new_status, buf)
     end
 
     if not header_idx or header_idx + 1 + task_index > #lines then
-      vim.notify("No se pudo encontrar la posición de la tarea en el archivo", vim.log.levels.ERROR)
+      log.error({
+        english = "Could not find task position in the file",
+        spanish = "No se pudo encontrar la posición de la tarea en el archivo"
+      })
       return
     end
 
@@ -430,15 +528,24 @@ function M.change_task_status(task_index, new_status, buf)
       local new_content = table.concat(lines, "\n")
       file_utils.write_file(todo_path, new_content)
 
-      vim.notify("Estado de tarea actualizado a: " .. new_status, vim.log.levels.INFO)
+      log.info({
+        english = "Task status updated to: " .. new_status,
+        spanish = "Estado de tarea actualizado a: " .. new_status
+      })
 
       -- Recargar la visualización
       reload_todo_split(buf)
     else
-      vim.notify("Formato de línea incorrecto: " .. line, vim.log.levels.ERROR)
+      log.error({
+        english = "Incorrect line format: " .. line,
+        spanish = "Formato de línea incorrecto: " .. line
+      })
     end
   else
-    vim.notify("Índice de tarea fuera de rango", vim.log.levels.ERROR)
+    log.error({
+      english = "Task index out of range",
+      spanish = "Índice de tarea fuera de rango"
+    })
   end
 end
 
@@ -503,12 +610,16 @@ function M.open_todo_split()
   api.nvim_buf_set_keymap(bufnr, "n", "r", "", {
     noremap = true,
     callback = function()
-      vim.notify("Refreshing TODO " .. todo_path, vim.log.levels.INFO)
+      -- Usar log con traducción automática
+      log.info({
+        english = "Refreshing TODOs " .. todo_path,
+        spanish = "Actualizando TODOs " .. todo_path
+      })
       M.generate_todo(function()
         reload_todo_split(bufnr)
       end)
     end,
-    desc = "Refresh TODO list",
+    desc = i18n.get_current_language() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
   })
 
   -- Añadir mapeo para filtrar por estado
@@ -516,7 +627,7 @@ function M.open_todo_split()
     noremap = true,
     callback = function()
       vim.ui.select({"all", "pending", "in_progress", "done"}, {
-        prompt = "Filtrar por estado:"
+        prompt = i18n.get_current_language() == "spanish" and "Filtrar por estado:" or "Filter by status:"
       }, function(choice)
         if choice then
           M.filter_tasks_by_status(choice, bufnr)
@@ -531,7 +642,7 @@ function M.open_todo_split()
     noremap = true,
     callback = function()
       vim.ui.select({"all", "1", "2", "3", "4", "5"}, {
-        prompt = "Filtrar por prioridad:"
+        prompt = i18n.get_current_language() == "spanish" and "Filtrar por prioridad:" or "Filter by priority:"
       }, function(choice)
         if choice then
           M.filter_tasks_by_priority(choice, bufnr)
@@ -548,7 +659,7 @@ function M.open_todo_split()
       local lnum = api.nvim_win_get_cursor(0)[1]
       if M.state.todo_tasks and lnum > 0 and lnum <= #M.state.todo_tasks then
         vim.ui.select({"pending", "in_progress", "done"}, {
-          prompt = "Cambiar estado a:"
+          prompt = i18n.get_current_language() == "spanish" and "Cambiar estado a:" or "Change status to:"
         }, function(choice)
           if choice then
             M.change_task_status(lnum, choice, bufnr)
@@ -563,18 +674,35 @@ function M.open_todo_split()
   api.nvim_buf_set_keymap(bufnr, "n", "?", "", {
     noremap = true,
     callback = function()
-      local help = {
-        "Atajos de teclado para TODOs:",
-        "",
-        "<CR> - Ver detalles de la tarea",
-        "r    - Actualizar lista de tareas",
-        "f    - Filtrar por estado",
-        "p    - Filtrar por prioridad",
-        "s    - Cambiar estado de tarea",
-        "i    - Implementar tarea seleccionada",
-        "?    - Mostrar esta ayuda",
-        "q    - Cerrar ventana",
-      }
+      local help
+
+      if i18n.get_current_language() == "spanish" then
+        help = {
+          "Atajos de teclado para TODOs:",
+          "",
+          "<CR> - Ver detalles de la tarea",
+          "r    - Actualizar lista de tareas",
+          "f    - Filtrar por estado",
+          "p    - Filtrar por prioridad",
+          "s    - Cambiar estado de tarea",
+          "i    - Implementar tarea seleccionada",
+          "?    - Mostrar esta ayuda",
+          "q    - Cerrar ventana",
+        }
+      else
+        help = {
+          "Keyboard shortcuts for TODOs:",
+          "",
+          "<CR> - View task details",
+          "r    - Refresh task list",
+          "f    - Filter by status",
+          "p    - Filter by priority",
+          "s    - Change task status",
+          "i    - Implement selected task",
+          "?    - Show this help",
+          "q    - Close window",
+        }
+      end
 
       local popup_buf = api.nvim_create_buf(false, true)
       api.nvim_buf_set_lines(popup_buf, 0, -1, false, help)
@@ -661,13 +789,42 @@ function M.generate_todo(callback)
   local todo = file_utils.read_file(paths.todo_path) or ""
   local full_context = requirement .. "\n" .. ticket_synthesis .. "\n" .. project_synthesis
 
+  -- Generar prompt para TODOs
   local prompt = require("copilotchatassist.prompts.todo_requests").default(full_context, ticket_synthesis, todo)
-  vim.notify("Starting to refresh TODO... ", vim.log.levels.INFO)
+
+  -- Usar log con traducción automática
+  log.info({
+    english = "Starting to refresh TODOs...",
+    spanish = "Comenzando a actualizar TODOs..."
+  })
+
   copilot_api.ask(prompt, {
     headless = true,
     callback = function(response)
-      file_utils.write_file(paths.todo_path, response or "")
-      vim.notify("Project Requirement TODO saved: " .. paths.todo_path, vim.log.levels.INFO)
+      local content = response
+
+      -- Verificar si la respuesta es una tabla con campo content
+      if type(response) == "table" and response.content then
+        log.debug({
+          english = "Response is a table, extracting content field",
+          spanish = "La respuesta es una tabla, extrayendo campo content"
+        })
+        content = response.content
+      elseif type(response) ~= "string" then
+        log.error({
+          english = "Unexpected response format: " .. type(response),
+          spanish = "Formato de respuesta inesperado: " .. type(response)
+        })
+        content = vim.inspect(response)
+      end
+
+      file_utils.write_file(paths.todo_path, content or "")
+
+      -- Notificar usando el módulo de log con traducción automática
+      log.info({
+        english = "Project TODOs saved: " .. paths.todo_path,
+        spanish = "TODOs del proyecto guardados en: " .. paths.todo_path
+      })
 
       -- Si hay callback, ejecutarla
       if callback and type(callback) == "function" then
@@ -680,30 +837,48 @@ end
 -- Implementar una tarea mediante CopilotChat y capturar patches
 function M.implement_task(task)
   if not task then
-    vim.notify("No hay tarea seleccionada para implementar", vim.log.levels.WARN)
+    log.warn({
+      english = "No task selected to implement",
+      spanish = "No hay tarea seleccionada para implementar"
+    })
     return
   end
 
   -- Usar la API de CopilotChat para solicitar implementación
-  vim.notify("Solicitando implementación para: " .. task.title, vim.log.levels.INFO)
+  log.info({
+    english = "Requesting implementation for: " .. task.title,
+    spanish = "Solicitando implementación para: " .. task.title
+  })
 
   local patches_module = require("copilotchatassist.patches")
   copilot_api.implement_task(task, function(response, patches_count)
     if patches_count > 0 then
-      vim.notify(string.format("Se generaron %d patches. Usa :CopilotPatchesWindow para revisarlos.", patches_count), vim.log.levels.INFO)
+      log.info({
+        english = string.format("Generated %d patches. Use :CopilotPatchesWindow to review them.", patches_count),
+        spanish = string.format("Se generaron %d patches. Usa :CopilotPatchesWindow para revisarlos.", patches_count)
+      })
 
       -- Preguntar si desea ver los patches ahora
       vim.defer_fn(function()
-        vim.ui.select({"Sí", "No"}, {
-          prompt = "¿Deseas ver los patches generados ahora?"
+        local yes_option = i18n.get_current_language() == "spanish" and "Sí" or "Yes"
+        local no_option = "No"
+        local prompt = i18n.get_current_language() == "spanish"
+          and "¿Deseas ver los patches generados ahora?"
+          or "Do you want to see the generated patches now?"
+
+        vim.ui.select({yes_option, no_option}, {
+          prompt = prompt
         }, function(choice)
-          if choice == "Sí" then
+          if choice == yes_option then
             patches_module.show_patch_window()
           end
         end)
       end, 500)
     else
-      vim.notify("No se generaron patches de código para esta tarea", vim.log.levels.INFO)
+      log.info({
+        english = "No code patches were generated for this task",
+        spanish = "No se generaron patches de código para esta tarea"
+      })
     end
 
     -- Si la tarea estaba pendiente, marcarla como en progreso

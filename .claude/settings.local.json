@@ -3,7 +3,18 @@
     "allow": [
       "Read(//Users/ralbertomerinocolipe/workspaces/personal/nvim/copilotfiles/lua/copilotfiles/**)",
       "Read(//Users/ralbertomerinocolipe/workspaces/personal/nvim/copilotfiles/**)",
-      "Read(//Users/ralbertomerinocolipe/.config/nvim/lua/plugins/**)"
+      "Read(//Users/ralbertomerinocolipe/.config/nvim/lua/plugins/**)",
+      "Read(//Users/ralbertomerinocolipe/workspaces/personal/nvim/GitWizV2/**)",
+      "Bash(luac:*)",
+      "Bash(cat:*)",
+      "Bash(lua:*)",
+      "Read(//Users/ralbertomerinocolipe/.local/share/nvim/lazy/nvim-jdtls/**)",
+      "Bash(chmod:*)",
+      "Read(//Users/ralbertomerinocolipe/.config/nvim/**)",
+      "Read(//Users/ralbertomerinocolipe/.cache/**)",
+      "Bash(nvim:*)",
+      "Bash(gh auth:*)",
+      "Bash(vim -c \"!echo ''Script corrected successfully!''\" -c q /Users/ralbertomerinocolipe/workspaces/personal/nvim/CopilotChatAssist/lua/copilotchatassist/prompts/todo_requests.lua)"
     ],
     "deny": [],
     "ask": []
