@@ -15,6 +15,8 @@ M.state = {
   paths = nil,       -- Rutas a archivos de contexto
   todo_split = nil,  -- Información sobre la ventana split de TODOs (win, buf)
   todo_tasks = {},   -- Tareas actuales
+  selected_task = nil, -- Tarea actualmente seleccionada
+  selected_task_index = nil, -- Índice de la tarea seleccionada
 }
 
 -- Obtener rutas actualizadas desde el contexto
@@ -489,7 +491,10 @@ function M.open_todo_split()
     callback = function()
       local lnum = api.nvim_win_get_cursor(0)[1]
       if M.state.todo_tasks and lnum > 0 and lnum <= #M.state.todo_tasks then
-        show_task_details(M.state.todo_tasks[lnum])
+        local task = M.state.todo_tasks[lnum]
+        M.state.selected_task = task
+        M.state.selected_task_index = lnum
+        show_task_details(task)
       end
     end,
     desc = "Show task details",
@@ -566,6 +571,7 @@ function M.open_todo_split()
         "f    - Filtrar por estado",
         "p    - Filtrar por prioridad",
         "s    - Cambiar estado de tarea",
+        "i    - Implementar tarea seleccionada",
         "?    - Mostrar esta ayuda",
         "q    - Cerrar ventana",
       }
@@ -598,6 +604,21 @@ function M.open_todo_split()
 
   -- Añadir mapeo para cerrar la ventana
   api.nvim_buf_set_keymap(bufnr, "n", "q", "<cmd>bd!<CR>", {noremap = true, silent = true})
+
+  -- Añadir mapeo para implementar la tarea seleccionada
+  api.nvim_buf_set_keymap(bufnr, "n", "i", "", {
+    noremap = true,
+    callback = function()
+      local lnum = api.nvim_win_get_cursor(0)[1]
+      if M.state.todo_tasks and lnum > 0 and lnum <= #M.state.todo_tasks then
+        local task = M.state.todo_tasks[lnum]
+        M.state.selected_task = task
+        M.state.selected_task_index = lnum
+        M.implement_task(task)
+      end
+    end,
+    desc = "Implement selected task",
+  })
 end
 
 function M.show_selected_task_details()
@@ -654,6 +675,42 @@ function M.generate_todo(callback)
       end
     end
   })
+end
+
+-- Implementar una tarea mediante CopilotChat y capturar patches
+function M.implement_task(task)
+  if not task then
+    vim.notify("No hay tarea seleccionada para implementar", vim.log.levels.WARN)
+    return
+  end
+
+  -- Usar la API de CopilotChat para solicitar implementación
+  vim.notify("Solicitando implementación para: " .. task.title, vim.log.levels.INFO)
+
+  local patches_module = require("copilotchatassist.patches")
+  copilot_api.implement_task(task, function(response, patches_count)
+    if patches_count > 0 then
+      vim.notify(string.format("Se generaron %d patches. Usa :CopilotPatchesWindow para revisarlos.", patches_count), vim.log.levels.INFO)
+
+      -- Preguntar si desea ver los patches ahora
+      vim.defer_fn(function()
+        vim.ui.select({"Sí", "No"}, {
+          prompt = "¿Deseas ver los patches generados ahora?"
+        }, function(choice)
+          if choice == "Sí" then
+            patches_module.show_patch_window()
+          end
+        end)
+      end, 500)
+    else
+      vim.notify("No se generaron patches de código para esta tarea", vim.log.levels.INFO)
+    end
+
+    -- Si la tarea estaba pendiente, marcarla como en progreso
+    if task.status:lower() == "pending" or task.status:lower() == "todo" then
+      M.change_task_status(M.state.selected_task_index, "in_progress", M.state.todo_split and M.state.todo_split.buf)
+    end
+  end)
 end
 
 return M

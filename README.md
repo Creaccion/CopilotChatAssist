@@ -6,10 +6,12 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 
 - **Sistema de gestión de TODOs**: Genera, visualiza y gestiona tareas basadas en el contexto de tu proyecto.
 - **Gestión contextual de trabajo**: Mantiene automáticamente el contexto de tu trabajo basado en la rama actual y los tickets.
+- **Sistema de patches de código**: Extrae, visualiza y aplica automáticamente bloques de código desde CopilotChat a tus archivos.
 - **Integración con Copilot**: Aprovecha la potencia de Copilot para automatizar tareas de programación.
 - **Ventanas flotantes personalizables**: Visualiza información y resultados en ventanas flotantes personalizadas.
 - **Filtrado de tareas**: Filtra y ordena tareas por estado, prioridad o categoría.
 - **Generación de PRs**: Facilita la creación de descripciones de Pull Requests con detalles del trabajo realizado.
+- **Implementación asistida**: Convierte TODOs en código funcional con la ayuda de Copilot.
 - **Documentación asistida**: Ayuda con la generación y actualización de documentación de código.
 
 ## Instalación
@@ -56,26 +58,57 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 ### Gestión de contexto y tickets
 
 - `:CopilotTicket` - Abre o crea contexto para el ticket/rama actual
-- `:CopilotRequerimentWork` - Similar a CopilotTicket (alias)
 - `:CopilotUpdateContext` - Actualiza el contexto del proyecto y ticket
+- `:CopilotProjectContext` - Genera contexto del proyecto
 
 ### Gestión de TODOs
 
 - `:CopilotGenerateTodo` - Genera TODOs basados en el contexto actual
 - `:CopilotTodoSplit` - Abre la ventana dividida de TODOs
 
-### Generación de documentación
+### Sistema de Patches
+
+- `:CopilotPatchesWindow` - Muestra la ventana de gestión de patches
+- `:CopilotPatchesShowQueue` - Muestra resumen de la cola de patches
+- `:CopilotPatchesApply` - Aplica todos los patches pendientes
+- `:CopilotPatchesClearQueue` - Limpia la cola de patches
+- `:CopilotPatchesProcessBuffer` - Procesa el buffer actual buscando patches
+
+### Generación de documentación y PRs
 
 - `:CopilotEnhancePR` - Genera o mejora la descripción de PR
+- `:CopilotAgentPR` - Utiliza agente avanzado para generar PRs
+- `:CopilotDocReview` - Revisa documentación actual
+- `:CopilotDocChanges` - Documenta cambios recientes
+
+### Síntesis y estructuración
+
+- `:CopilotSynthetize` - Sintetiza información del contexto
+- `:CopilotStructure` - Genera estructura de proyecto
+- `:CopilotDot` - Genera diagramas en formato DOT
+- `:CopilotDotPreview` - Vista previa de diagramas DOT
+
+## Flujos de trabajo
+
+### Ciclo de implementación de tareas
+
+1. Inicia con `:CopilotTicket` para establecer contexto
+2. Genera TODOs con `:CopilotGenerateTodo`
+3. Visualiza y gestiona tareas con `:CopilotTodoSplit`
+4. Selecciona una tarea y presiona `i` para implementación asistida
+5. Revisa y aplica los patches generados
+6. Marca las tareas como completadas
+7. Genera descripción de PR con `:CopilotEnhancePR`
 
 ## Documentación adicional
 
 Para más detalles sobre el uso, consulta los siguientes recursos:
 
 - [Guía de usuario](docs/usage_examples.md) - Ejemplos detallados de uso
-- [Guía de desarrollo](docs/developer_guide.md) - Documentación para desarrolladores
-- [Arquitectura](docs/architecture.md) - Información sobre la arquitectura del plugin
-- [Hoja de ruta](docs/roadmap.md) - Características planificadas y mejoras
+- [Sistema de TODOs](docs/todo_system.md) - Documentación del sistema de TODOs
+- [Sistema de Patches](docs/patches_system.md) - Documentación del sistema de patches
+- [Configuración](docs/configuration.md) - Opciones de configuración detalladas
+- [Resolución de problemas](docs/troubleshooting.md) - Guía de resolución de problemas
 
 ## Resolución de problemas
 
@@ -84,6 +117,7 @@ Si encuentras problemas con el plugin:
 1. Verifica que CopilotChat esté correctamente instalado y configurado
 2. Asegúrate de tener las dependencias adecuadas
 3. Activa los logs de debug: `vim.g.copilotchatassist_debug = true`
+4. Consulta la guía de [Resolución de problemas](docs/troubleshooting.md)
 
 ## Licencia
 

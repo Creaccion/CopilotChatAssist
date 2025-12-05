@@ -23,6 +23,18 @@ local function add_to_history(request, response)
 
   table.insert(M.history.requests, request)
   table.insert(M.history.responses, response)
+
+  -- Procesar respuesta en busca de patches
+  if response and type(response) == "string" then
+    local patches_module = require("copilotchatassist.patches")
+    local patch_count = patches_module.process_copilot_response(response)
+
+    if patch_count > 0 then
+      vim.defer_fn(function()
+        vim.notify(string.format("Se encontraron %d patches en la respuesta. Usa :CopilotPatchesWindow para verlos.", patch_count), vim.log.levels.INFO)
+      end, 500) -- Pequeño retraso para que la notificación sea visible después de la respuesta
+    end
+  end
 end
 
 -- Función principal para enviar peticiones a CopilotChat
@@ -33,9 +45,12 @@ function M.ask(message, opts)
         require("copilotchatassist.prompts.system").default
   end
 
-  -- Registrar la solicitud sin usar el módulo log
-  -- Mensaje debug silenciado para evitar error
-  -- vim.notify("Sending request to CopilotChat", vim.log.levels.DEBUG)
+  -- Registrar la solicitud (protegido contra errores)
+  pcall(function()
+    if log and log.debug then
+      log.debug("Sending request to CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "..."))
+    end
+  end)
 
   -- Si se proporciona una función de callback, envolvemos la original para almacenar el historial
   local original_callback = opts.callback
@@ -43,6 +58,11 @@ function M.ask(message, opts)
     opts.callback = function(response)
       add_to_history(message, response)
       original_callback(response)
+    end
+  else
+    -- Si no hay callback, creamos uno para procesar patches
+    opts.callback = function(response)
+      add_to_history(message, response)
     end
   end
 
@@ -189,6 +209,54 @@ function M.get_history(limit)
   end
 
   return result
+end
+
+-- Procesar contenido para extraer patches
+function M.process_for_patches(content)
+  if not content or type(content) ~= "string" then
+    log.debug("Contenido inválido para procesamiento de patches")
+    return 0
+  end
+
+  local patches_module = require("copilotchatassist.patches")
+  return patches_module.process_copilot_response(content)
+end
+
+-- Solicitar la implementación de una tarea específica
+function M.implement_task(task, callback)
+  local prompt = [[
+Por favor, implementa la siguiente tarea usando código claro y bien estructurado:
+
+- Título: ]] .. task.title .. [[
+- Descripción: ]] .. (task.description or "N/A") .. [[
+- Categoría: ]] .. (task.category or "N/A") .. [[
+
+Si tu implementación requiere modificaciones en archivos existentes, proporciona los cambios en formato de patch:
+
+```<lenguaje> path=/ruta/al/archivo start_line=<num> end_line=<num> mode=<modo>
+<código>
+```end
+
+Donde <modo> puede ser:
+- replace: Reemplazar las líneas start_line a end_line con el código proporcionado
+- insert: Insertar el código en la posición start_line
+- append: Añadir el código después de la línea end_line
+- delete: Eliminar las líneas start_line a end_line
+
+Si necesitas crear un archivo nuevo, usa path a la ruta completa donde debe crearse.
+]]
+
+  M.ask(prompt, {
+    headless = false,
+    callback = function(response)
+      -- Procesar automáticamente para patches
+      local patches_count = M.process_for_patches(response)
+
+      if callback then
+        callback(response, patches_count)
+      end
+    end
+  })
 end
 
 return M

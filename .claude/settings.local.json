@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/ralbertomerinocolipe/workspaces/personal/nvim/copilotfiles/lua/copilotfiles/**)",
+      "Read(//Users/ralbertomerinocolipe/workspaces/personal/nvim/copilotfiles/**)",
+      "Read(//Users/ralbertomerinocolipe/.config/nvim/lua/plugins/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
