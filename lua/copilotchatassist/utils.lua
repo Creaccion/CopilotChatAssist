@@ -7,6 +7,10 @@ local file_utils = require("copilotchatassist.utils.file")
 local buffer_utils = require("copilotchatassist.utils.buffer")
 local log = require("copilotchatassist.utils.log")
 
+-- Re-export string_utils functions
+M.trim = string_utils.trim
+M.truncate_string = string_utils.truncate_string
+
 -- Get the current branch name
 function M.get_current_branch()
   local handle = io.popen("git rev-parse --abbrev-ref HEAD")
