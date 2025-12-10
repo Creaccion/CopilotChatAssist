@@ -41,7 +41,7 @@ local function create_commands()
     if target_language == "" then
       -- Si no se especifica idioma, usar el idioma configurado
       target_language = i18n.get_current_language()
-      vim.notify("Usando idioma configurado: " .. target_language, vim.log.levels.INFO)
+      log.debug("Usando idioma configurado: " .. target_language)
     end
     require("copilotchatassist.pr_generator_i18n").change_pr_language(target_language)
   end, {
@@ -58,7 +58,7 @@ local function create_commands()
     if target_language == "" then
       -- Si no se especifica idioma, usar el idioma configurado
       target_language = i18n.get_current_language()
-      vim.notify("Usando idioma configurado: " .. target_language, vim.log.levels.INFO)
+      log.debug("Usando idioma configurado: " .. target_language)
     end
     require("copilotchatassist.pr_generator_i18n").simple_change_pr_language(target_language)
   end, {
@@ -147,7 +147,7 @@ local function create_commands()
   -- ya que la funcionalidad ha sido integrada en los comandos principales
   -- Lo mantenemos por compatibilidad con versiones anteriores
   vim.api.nvim_create_user_command("CopilotDocJavaRecord", function()
-    vim.notify("Este comando está obsoleto. Usa CopilotDocSync o CopilotDocGenerate que ahora detectan automáticamente los records de Java.", vim.log.levels.WARN)
+    log.warn("Este comando está obsoleto. Usa CopilotDocSync o CopilotDocGenerate que ahora detectan automáticamente los records de Java.")
     require("copilotchatassist.documentation.language.java").document_java_record()
   end, {})
 end
@@ -188,7 +188,8 @@ function M.setup(opts)
     end)
   end, 100)
 
-  log.info("CopilotChatAssist inicializado correctamente")
+  -- Important initialization notification - show as a notification with timeout
+  vim.notify("CopilotChatAssist initialized", vim.log.levels.INFO, { timeout = 2000 })
 end
 
 -- Exponer la función get_copilotchat_config para que CopilotChat pueda utilizarla

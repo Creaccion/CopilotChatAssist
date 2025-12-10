@@ -9,7 +9,11 @@ function M.default(full_context, ticket_context, existing_todo)
 
   -- Crear el inicio del prompt con los valores reales de lenguaje insertados
   local prompt_start = string.format([[Siempre usando el lenguaje %s para nuestra interaccion y lo relacionado a los TODOS, sin traducir codigo o elementos del código
-, y el lenguaje %s para todo lo relacionado al código, documentacion, debugs.]], user_language, code_language)
+, y el lenguaje %s para todo lo relacionado al código, documentacion, debugs.
+
+IMPORTANTE: Todas las tareas, categorías, títulos y descripciones en la tabla deben generarse en %s. No solo el formato de la tabla sino también su contenido debe estar completamente en %s.
+
+Asegúrate de que las categorías como 'testing', 'feature', 'refactor', 'docs', etc. y todos los valores de la tabla estén en el idioma %s.]], user_language, code_language, user_language, user_language, user_language)
 
   -- Adaptar etiquetas según el idioma
   local status_labels = {

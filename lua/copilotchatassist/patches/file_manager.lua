@@ -190,7 +190,7 @@ function M.apply_patch(patch, callback)
 
     -- Validar antes de aplicar
     if not start_line or not end_line then
-      vim.notify("El patch no tiene línea de inicio o fin", vim.log.levels.ERROR)
+      log.error("El patch no tiene línea de inicio o fin")
       log.error("Patch sin línea de inicio o fin, no se puede aplicar")
       if callback then callback() end
       return

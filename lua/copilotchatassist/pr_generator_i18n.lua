@@ -176,11 +176,12 @@ end
 function M.generate_pr_title(callback)
   local diff = get_diff()
   if diff == "" then
-    vim.notify("No se encontraron cambios para generar un título", vim.log.levels.ERROR)
+    log.debug("No se encontraron cambios para generar un título")
     return
   end
 
-  local language = i18n.get_current_language()
+  -- Always use the configured language from options
+  local language = options.get().language
   local title_prefix = i18n.t("pr.title_prefix")
 
   local prompt
@@ -218,17 +219,17 @@ function M.generate_pr_title(callback)
     ]], title_prefix, diff)
   end
 
-  vim.notify("Generating PR title with CopilotChat...", vim.log.levels.INFO)
+  log.debug("Generating PR title with CopilotChat...")
   copilot_api.ask(prompt, {
     callback = function(response)
       local title = response or ""
       if title ~= "" then
-        vim.notify("PR title generated.", vim.log.levels.INFO)
+        log.debug("PR title generated.")
         if callback then
           callback(title)
         end
       else
-        vim.notify("Failed to generate PR title.", vim.log.levels.ERROR)
+        log.debug("Failed to generate PR title.")
         if callback then
           callback(nil)
         end
@@ -241,11 +242,12 @@ end
 function M.generate_pr_description(callback)
   local diff = get_diff()
   if diff == "" then
-    vim.notify("No se encontraron cambios para generar una descripción", vim.log.levels.ERROR)
+    log.debug("No se encontraron cambios para generar una descripción")
     return
   end
 
-  local language = i18n.get_current_language()
+  -- Always use the configured language from options
+  local language = options.get().language
   local summary_section = i18n.t("pr.summary_section")
   local changes_section = i18n.t("pr.changes_section")
   local test_section = i18n.t("pr.test_section")
@@ -351,19 +353,19 @@ function M.generate_pr_description(callback)
     ]], summary_section, summary_bullet, changes_section, test_section, test_todo, diff)
   end
 
-  vim.notify("Generating PR description with CopilotChat...", vim.log.levels.INFO)
+  log.debug("Generating PR description with CopilotChat...")
   copilot_api.ask(prompt, {
     callback = function(response)
       local description = response or ""
       if description ~= "" then
-        vim.notify("PR description generated.", vim.log.levels.INFO)
+        log.debug("PR description generated.")
         -- Guardar el idioma actual de la descripción
         M.state.pr_language = language
         if callback then
           callback(description)
         end
       else
-        vim.notify("Failed to generate PR description.", vim.log.levels.ERROR)
+        log.debug("Failed to generate PR description.")
         if callback then
           callback(nil)
         end
@@ -383,11 +385,12 @@ function M.enhance_pr(opts)
   log.debug("Idioma configurado en opciones: " .. target_language)
 
   if not old_desc or old_desc == "" then
-    vim.notify("No PR description found. Generating a new one...", vim.log.levels.WARN)
+    log.debug("No PR description found. Generating a new one...")
     M.generate_pr_description(function(new_desc)
       if new_desc then
         update_pr_description(new_desc)
-        vim.notify("PR description created successfully.", vim.log.levels.INFO)
+        -- Command completion - show at INFO level
+        vim.notify("PR description created.", vim.log.levels.INFO, { timeout = 2000 })
       end
     end)
     return
@@ -395,7 +398,7 @@ function M.enhance_pr(opts)
 
   local diff = get_diff()
   if diff == "" then
-    vim.notify("No se encontraron cambios recientes para mejorar la descripción", vim.log.levels.WARN)
+    log.debug("No se encontraron cambios recientes para mejorar la descripción")
     return
   end
 
@@ -407,52 +410,22 @@ function M.enhance_pr(opts)
   log.info("Idioma configurado para usar: " .. target_language)
 
   -- Crear identificador para notificación
-  local notify_id = vim.notify("Enhancing PR description with CopilotChat...", vim.log.levels.INFO, {
-    title = "PR Enhancement",
-    timeout = false
-  })
+  -- Use debug level for progress instead of notification
+  log.debug("Enhancing PR description with CopilotChat...")
+  -- Create a notification ID for later use but don't show notification
+  local notify_id = nil
 
-  -- Crear spinner para mostrar progreso
-  local spinner = {
-    frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-    idx = 1,
-    timer = nil,
-    start_time = os.time()
-  }
-
-  -- Iniciar animación de spinner
-  spinner.timer = vim.loop.new_timer()
-  spinner.timer:start(150, 150, function()
-    vim.schedule(function()
-      spinner.idx = (spinner.idx % #spinner.frames) + 1
-      local elapsed = os.time() - spinner.start_time
-      vim.cmd(string.format("echo '%s Mejorando descripción del PR... (%ds)'",
-              spinner.frames[spinner.idx], elapsed))
-    end)
-  end)
+  -- Use a simple indicator in the status line instead of frequent updates
+  local start_time = os.time()
 
   -- Configurar timeout con valor más alto para evitar problemas con PRs grandes
   local timeout_timer = vim.defer_fn(function()
     -- Si llegamos aquí, la solicitud nunca completó
-    if spinner and spinner.timer then
-      spinner.timer:stop()
-      spinner.timer:close()
-      vim.cmd("echo ''") -- Limpiar mensaje de estado
-      vim.notify("Timeout alcanzado. La operación tomó demasiado tiempo.",
-                vim.log.levels.WARN, {
-                  title = "PR Enhancement",
-                  timeout = 5000,
-                  replace = notify_id
-                })
-    end
+    -- Clear any status line messages
+    vim.cmd("echo ''") -- Limpiar mensaje de estado
+    log.warn("Timeout alcanzado. La operación tomó demasiado tiempo.")
 
-    -- Asegurarnos de cerrar la notificación principal si sigue activa
-    if notify_id then
-      vim.notify("Operación cancelada debido a timeout.", vim.log.levels.ERROR, {
-        replace = notify_id,
-        timeout = 3000
-      })
-    end
+    -- No need to close notifications since we're using debug logs
   end, 300000) -- 5 minutos de timeout para dar más tiempo a CopilotChat
 
   -- Crear un prompt simplificado con límite de tamaño para evitar respuestas excesivamente largas
@@ -619,11 +592,7 @@ function M.enhance_pr(opts)
         if type(response) == "table" then
           log.debug("Contenido de la tabla: " .. vim.inspect(response))
         end
-        vim.notify("Error: formato de respuesta no reconocido.", vim.log.levels.ERROR, {
-          title = "PR Enhancement",
-          timeout = 5000,
-          replace = notify_id
-        })
+        log.error("Error: formato de respuesta no reconocido.")
         return
       end
 
@@ -666,31 +635,22 @@ function M.enhance_pr(opts)
 
           -- Asegurar que la notificación se cierra después de mostrar el éxito
           -- Utilizamos timeout corto para que desaparezca
-          vim.notify(success_msg, vim.log.levels.INFO, {
-            title = "PR Enhancement",
-            timeout = 5000,
-            replace = notify_id
-          })
+          -- Command completion - show at INFO level
+          vim.notify("PR enhancement complete.", vim.log.levels.INFO, { timeout = 2000 })
+          local success_notify_id = nil
 
-          -- Forzar limpieza de la notificación original después de un breve retraso
-          vim.defer_fn(function()
-            -- Enviar notificación vacía con timeout=1 para asegurar que la original desaparece
-            vim.notify("", vim.log.levels.INFO, {
-              replace = notify_id,
-              timeout = 1
-            })
-          end, 5500)  -- 5.5 segundos, justo después de que la notificación de éxito desaparezca
+          -- No need to clean up notifications anymore  -- 5.5 segundos, justo después de que la notificación de éxito desaparezca
 
           -- Actualizar el estado del idioma si se realizó una traducción
           if detected_language ~= target_language then
             M.state.pr_language = target_language
           end
         else
-          vim.notify("Failed to update PR description. Check logs for details.",
+          -- Always show errors but with shorter timeout
+          local error_notify_id = vim.notify("Failed to update PR description.",
                     vim.log.levels.ERROR, {
                       title = "PR Enhancement",
-                      timeout = 5000,
-                      replace = notify_id
+                      timeout = 3000
                     })
 
           -- También forzar limpieza en caso de error
@@ -699,34 +659,26 @@ function M.enhance_pr(opts)
               replace = notify_id,
               timeout = 1
             })
+            vim.notify("", vim.log.levels.INFO, {
+              replace = error_notify_id,
+              timeout = 1
+            })
           end, 5500)
         end
       else
         if not new_desc or new_desc == "" then
           log.warn("La nueva descripción está vacía")
-          vim.notify("Received empty PR description from CopilotChat.",
-                    vim.log.levels.WARN, {
-                      title = "PR Enhancement",
-                      timeout = 5000,
-                      replace = notify_id
-                    })
+          -- Convert to debug log
+          log.debug("Received empty PR description from CopilotChat.")
+          local empty_notify_id = nil
         else
           log.info("La nueva descripción es idéntica a la original")
-          vim.notify("No significant improvements to make to PR description.",
-                    vim.log.levels.INFO, {
-                      title = "PR Enhancement",
-                      timeout = 5000,
-                      replace = notify_id
-                    })
+          -- Convert to debug log
+          log.debug("No significant improvements to make to PR description.")
+          local no_change_notify_id = nil
         end
 
-        -- Forzar limpieza de notificación en ambos casos
-        vim.defer_fn(function()
-          vim.notify("", vim.log.levels.INFO, {
-            replace = notify_id,
-            timeout = 1
-          })
-        end, 5500)
+        -- No need to clean up since we're using debug logs instead of notifications
       end
     end
   })
@@ -764,31 +716,16 @@ function M.change_pr_language(target_language)
   vim.notify("Traduciendo descripción del PR de " .. current_detected_language .. " a " .. target_language .. "...", vim.log.levels.INFO)
   log.info("Traduciendo descripción del PR de " .. current_detected_language .. " a " .. target_language)
 
-  -- Iniciar un indicador de actividad
-  local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-  local spinner_idx = 1
-  local timer_id = vim.loop.new_timer()
-  local spinner_active = true
-
-  timer_id:start(100, 100, function()
-    vim.schedule(function()
-      if spinner_active then
-        vim.cmd("echo '" .. spinner_frames[spinner_idx] .. " Traduciendo descripción del PR...'")
-        spinner_idx = (spinner_idx % #spinner_frames) + 1
-      end
-    end)
-  end)
+  -- Log the activity instead of using spinner
+  log.debug("Traduciendo descripción del PR...")
 
   -- Traducir la descripción de forma asíncrona
   log.debug("Iniciando traducción asíncrona de texto largo...")
 
   -- Usar i18n.translate_text con callback para procesamiento asíncrono
   i18n.translate_text(old_desc, target_language, function(translated_desc)
-    -- Detener el spinner cuando se complete la traducción
-    spinner_active = false
-    timer_id:stop()
-    timer_id:close()
-    vim.cmd("echo ''") -- Limpiar el mensaje de spinner
+    -- Clear any status message
+    vim.cmd("echo ''") -- Limpiar el mensaje de estado
 
     -- Verificar resultado de la traducción
     if not translated_desc or translated_desc == "" then
@@ -846,31 +783,13 @@ function M.change_pr_language(target_language)
 
       log.debug("Intento " .. attempt .. " de " .. max_attempts .. " para actualizar PR")
 
-      -- Crear un spinner para la actualización
-      local update_spinner = {
-        frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
-        idx = 1,
-        timer = vim.loop.new_timer(),
-        active = true
-      }
-
-      -- Iniciar animación
-      update_spinner.timer:start(100, 100, function()
-        vim.schedule(function()
-          if update_spinner.active then
-            vim.cmd("echo '" .. update_spinner.frames[update_spinner.idx] .. " Actualizando PR en GitHub...'")
-            update_spinner.idx = (update_spinner.idx % #update_spinner.frames) + 1
-          end
-        end)
-      end)
+      -- Just log the action instead of showing spinner
+      log.debug("Actualizando PR en GitHub...")
 
       -- Intentar la actualización
       local success = update_pr_description(translated_desc)
 
-      -- Detener el spinner
-      update_spinner.active = false
-      update_spinner.timer:stop()
-      update_spinner.timer:close()
+      -- Clear status line
       vim.cmd("echo ''")  -- Limpiar el mensaje
 
       -- Procesar el resultado
@@ -1035,22 +954,14 @@ function M.simple_change_pr_language(target_language)
 
       if success then
         log.info("PR actualizado correctamente a " .. target_language)
-        vim.notify("Descripción del PR traducida con éxito a " .. target_language,
-                  vim.log.levels.INFO, {
-                    title = "PR Translation",
-                    timeout = 5000,
-                    replace = notify_id
-                  })
+        -- Command completion - show at INFO level
+        vim.notify("PR translation complete.", vim.log.levels.INFO, { timeout = 2000 })
         -- Actualizar el idioma registrado
         M.state.pr_language = target_language
       else
         log.error("Error al actualizar la descripción del PR")
-        vim.notify("Error al actualizar la descripción del PR en GitHub. Ver logs para detalles.",
-                  vim.log.levels.ERROR, {
-                    title = "PR Translation",
-                    timeout = 5000,
-                    replace = notify_id
-                  })
+        -- Just log errors instead of showing notifications
+        log.error("Error al actualizar PR")
       end
     end
   })
@@ -1061,8 +972,9 @@ function M.register_simple_command()
   vim.api.nvim_create_user_command("CopilotSimpleChangePRLanguage", function(opts)
     local target_language = opts.args
     if target_language == "" then
-      target_language = i18n.get_current_language()
-      vim.notify("Usando idioma configurado: " .. target_language, vim.log.levels.INFO)
+      -- Always use configured language
+      target_language = options.get().language
+      log.debug("Usando idioma configurado: " .. target_language)
     end
     M.simple_change_pr_language(target_language)
   end, {

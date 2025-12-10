@@ -108,8 +108,13 @@ function M.log(msg, level)
     prefix = prefix .. "[" .. (M.level_names[level] or "UNKNOWN") .. "]"
   end
 
-  -- Usar vim.notify directamente con el nivel de log configurado
-  vim.notify(prefix .. " " .. msg, level)
+  if level == vim.log.levels.DEBUG or level == vim.log.levels.TRACE then
+    -- For debug and trace levels, just print to console instead of showing notifications
+    print(prefix .. " " .. msg)
+  else
+    -- For ERROR, WARN, and INFO use notify
+    vim.notify(prefix .. " " .. msg, level)
+  end
 end
 
 -- Funciones específicas por nivel
@@ -167,10 +172,10 @@ function M.show_config()
 end
 
 -- Inicialización
--- Inicializar con mensaje traducido
-M.debug({
+-- Inicializar con mensaje traducido (using INFO to ensure it's visible)
+M.info({
   english = "Log module initialized with level: " .. M.level_names[get_log_level()],
-  spanish = "Módulo de log inicializado con nivel: " .. M.level_names[get_log_level()]
+  spanish = "Módulo de log inicializado with level: " .. M.level_names[get_log_level()]
 })
 
 return M
