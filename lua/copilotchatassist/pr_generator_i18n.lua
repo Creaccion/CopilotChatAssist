@@ -415,18 +415,20 @@ function M.enhance_pr(opts)
   -- Create a notification ID for later use but don't show notification
   local notify_id = nil
 
-  -- Use a simple indicator in the status line instead of frequent updates
-  local start_time = os.time()
-
   -- Configurar timeout con valor más alto para evitar problemas con PRs grandes
-  local timeout_timer = vim.defer_fn(function()
+  local timeout_timer = vim.loop.new_timer()
+  timeout_timer:start(300000, 0, vim.schedule_wrap(function()
     -- Si llegamos aquí, la solicitud nunca completó
     -- Clear any status line messages
     vim.cmd("echo ''") -- Limpiar mensaje de estado
     log.warn("Timeout alcanzado. La operación tomó demasiado tiempo.")
 
     -- No need to close notifications since we're using debug logs
-  end, 300000) -- 5 minutos de timeout para dar más tiempo a CopilotChat
+    if timeout_timer then
+      timeout_timer:stop()
+      timeout_timer:close()
+    end
+  end)) -- 5 minutos de timeout para dar más tiempo a CopilotChat
 
   -- Crear un prompt simplificado con límite de tamaño para evitar respuestas excesivamente largas
   local prompt
@@ -571,11 +573,13 @@ function M.enhance_pr(opts)
   copilot_api.ask(simplified_prompt, {
     system_prompt = "You are an expert in documentation and translation focused on Pull Request descriptions. You provide clear, concise, and accurate descriptions with diagrams when helpful. For Mermaid diagrams, you use extremely simple and valid syntax to avoid parsing errors. You never use parentheses or special characters in node text. You use short node names like A, B, C with simple text descriptions.",
     callback = function(response)
-      -- Detener y limpiar el timer de animación
-      if spinner.timer then
-        spinner.timer:stop()
-        spinner.timer:close()
-        vim.cmd("echo ''") -- Limpiar mensaje de estado
+      -- Clean up any status messages
+      vim.cmd("echo ''") -- Limpiar mensaje de estado
+
+      -- Cancel timeout timer
+      if timeout_timer then
+        timeout_timer:stop()
+        timeout_timer:close()
       end
 
       log.debug("Recibida respuesta para enhance_pr (tipo: " .. type(response) .. ")")

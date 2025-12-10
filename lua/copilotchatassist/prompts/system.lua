@@ -5,7 +5,7 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = string.format( [[
-To begin, all our interaction will be in %s, but the code, comments, and documentation will be maintained in English unless explicitly stated otherwise.
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
 You are an expert assistant in software development, systems, and DevOps.
 
 **Guidelines for patch block generation:**
