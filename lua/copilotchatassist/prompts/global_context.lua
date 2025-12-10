@@ -1,8 +1,10 @@
 -- Prompt for global project context analysis
+local options = require("copilotchatassist.options")
 
 local M = {}
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 Analiza el proyecto detectando automáticamente el stack tecnológico principal según los archivos presentes: ##files://glob/**.*
 
 - Si detectas más de un stack, pregunta cuál debe usarse.

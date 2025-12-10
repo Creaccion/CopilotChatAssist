@@ -6,7 +6,7 @@ local function agent_pr_action(msg)
 end
 
 return {
-  agent_pr_action = agent_pr_action,
+  agent_pr_action = agent_pr_action
 }
 -- -- agent_pr.lua
 -- local M = {}
@@ -87,5 +87,5 @@ return {
 --
 
 
-return M
-
+-- return M
+--

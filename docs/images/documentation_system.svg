@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main background -->
+  <rect x="0" y="0" width="800" height="500" fill="#f8f9fa" />
+
+  <!-- Title -->
+  <text x="400" y="30" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">Documentation System</text>
+
+  <!-- File Types -->
+  <rect x="50" y="70" width="200" height="160" rx="5" ry="5" fill="#fff" stroke="#6c757d" stroke-width="2" />
+  <text x="150" y="95" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Supported Languages</text>
+  <text x="150" y="125" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Java (JavaDoc)</text>
+  <text x="150" y="145" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Lua (LDoc)</text>
+  <text x="150" y="165" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Ruby (YARD)</text>
+  <text x="150" y="185" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Elixir (ExDoc)</text>
+  <text x="150" y="205" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- YAML, HCL, Shell, etc.</text>
+
+  <!-- Commands -->
+  <rect x="50" y="260" width="200" height="180" rx="5" ry="5" fill="#bee3f8" stroke="#3182ce" stroke-width="2" />
+  <text x="150" y="285" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Commands</text>
+  <text x="150" y="315" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotDocScan</text>
+  <text x="150" y="335" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotDocSync</text>
+  <text x="150" y="355" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotDocGenerate</text>
+  <text x="150" y="375" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotDocGitChanges</text>
+  <text x="150" y="395" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotDocJavaRecord</text>
+  <text x="150" y="415" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">(deprecated)</text>
+
+  <!-- Detection -->
+  <rect x="300" y="100" width="200" height="120" rx="5" ry="5" fill="#fed7d7" stroke="#e53e3e" stroke-width="2" />
+  <text x="400" y="125" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Detection</text>
+  <text x="400" y="150" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">1. Identify file type</text>
+  <text x="400" y="170" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">2. Scan for undocumented</text>
+  <text x="400" y="190" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">   elements</text>
+  <text x="400" y="210" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">3. Prepare for generation</text>
+
+  <!-- CopilotChat -->
+  <rect x="300" y="260" width="200" height="80" rx="5" ry="5" fill="#e9d8fd" stroke="#805ad5" stroke-width="2" />
+  <text x="400" y="285" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">CopilotChat</text>
+  <text x="400" y="305" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">AI-powered documentation</text>
+  <text x="400" y="325" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">generation</text>
+
+  <!-- Generation -->
+  <rect x="550" y="180" width="200" height="120" rx="5" ry="5" fill="#c6f6d5" stroke="#38a169" stroke-width="2" />
+  <text x="650" y="205" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Generation</text>
+  <text x="650" y="230" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">1. Create documentation</text>
+  <text x="650" y="250" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">   in correct format</text>
+  <text x="650" y="270" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">2. Format per language</text>
+  <text x="650" y="290" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">3. Insert at correct position</text>
+
+  <!-- Preview/Apply -->
+  <rect x="550" y="340" width="200" height="80" rx="5" ry="5" fill="#fff3bf" stroke="#f59f00" stroke-width="2" />
+  <text x="650" y="365" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Preview & Apply</text>
+  <text x="650" y="385" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">User reviews and applies</text>
+  <text x="650" y="405" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">documentation changes</text>
+
+  <!-- Flow arrows -->
+  <!-- Commands -> Detection -->
+  <line x1="250" y1="320" x2="300" y2="160" stroke="#333" stroke-width="2" />
+  <polygon points="300,160 291,162 295,170" fill="#333" />
+
+  <!-- Languages -> Detection -->
+  <line x1="250" y1="150" x2="300" y2="150" stroke="#333" stroke-width="2" />
+  <polygon points="300,150 292,145 292,155" fill="#333" />
+
+  <!-- Detection -> CopilotChat -->
+  <line x1="400" y1="220" x2="400" y2="260" stroke="#333" stroke-width="2" />
+  <polygon points="400,260 405,252 395,252" fill="#333" />
+
+  <!-- CopilotChat -> Generation -->
+  <line x1="500" y1="300" x2="550" y2="260" stroke="#333" stroke-width="2" />
+  <polygon points="550,260 541,260 545,268" fill="#333" />
+
+  <!-- Generation -> Preview/Apply -->
+  <line x1="650" y1="300" x2="650" y2="340" stroke="#333" stroke-width="2" />
+  <polygon points="650,340 655,332 645,332" fill="#333" />
+
+  <!-- Git Changes -->
+  <rect x="300" y="380" width="200" height="80" rx="5" ry="5" fill="#d3f9d8" stroke="#40c057" stroke-width="2" />
+  <text x="400" y="405" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Git Changes</text>
+  <text x="400" y="425" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">Document elements based</text>
+  <text x="400" y="445" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">on git diff</text>
+
+  <!-- Commands -> Git Changes -->
+  <line x1="250" y1="375" x2="300" y2="400" stroke="#333" stroke-width="2" />
+  <polygon points="300,400 292,395 292,405" fill="#333" />
+
+  <!-- Git Changes -> CopilotChat -->
+  <line x1="400" y1="380" x2="400" y2="340" stroke="#333" stroke-width="2" />
+  <polygon points="400,340 395,348 405,348" fill="#333" />
+
+  <!-- Legend -->
+  <rect x="50" y="450" width="700" height="30" rx="5" ry="5" fill="#e9ecef" stroke="#adb5bd" stroke-width="1" />
+  <text x="400" y="470" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">Documentation can be generated for individual elements, entire files, or automatically for git-modified code</text>
+</svg>

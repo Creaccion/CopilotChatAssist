@@ -1,0 +1,4 @@
+Este archivo tiene múltiples líneas
+con diferentes caracteres especiales: áéíóú
+y símbolos como: !@#$%^&*()_+-=[]{}|;':",./<>?
+  

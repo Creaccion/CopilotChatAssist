@@ -1,8 +1,10 @@
 -- Prompt for synthesizing project context
+local options = require("copilotchatassist.options")
 
 local M = {}
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 Sintetiza el contexto actual del proyecto de forma autocontenida y reutilizable. Usa solo la información disponible, sin introducciones ni despedidas, y no dejes tareas pendientes.
 
 Incluye:

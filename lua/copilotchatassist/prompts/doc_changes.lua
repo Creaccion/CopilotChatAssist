@@ -6,6 +6,7 @@ using the enhanced logic from doc_changes.lua.
 ]]
 
 local doc_changes = require("copilotchatassist.doc_changes")
+local options = require("copilotchatassist.options")
 
 local M = {}
 

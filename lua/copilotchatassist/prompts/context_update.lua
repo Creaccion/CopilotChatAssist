@@ -1,6 +1,8 @@
 local M = {}
+local options = require("copilotchatassist.options")
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 You are an expert assistant for project and ticket context management.
 
 Given the following requirement and the currently persisted context, analyze if the context stored in the file is outdated or incomplete based on the requirement.
