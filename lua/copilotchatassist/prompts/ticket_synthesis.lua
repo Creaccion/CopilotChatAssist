@@ -1,8 +1,10 @@
 -- Prompt for ticket synthesis
+local options = require("copilotchatassist.options")
 
 local M = {}
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 Sintetiza el contexto del ticket actual incluyendo:
 
 - Stack tecnológico principal y dependencias relevantes

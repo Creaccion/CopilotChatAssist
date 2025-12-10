@@ -1,8 +1,10 @@
 -- Prompt for initial project context analysis
+local options = require("copilotchatassist.options")
 
 local M = {}
 
 M.default = [[
+Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
 You are an expert software architect and code reviewer.
 
 Your task is to analyze the current state of the project using all available context, including the content of changed files, provided diffs, and, if possible, the full content of relevant files. Synthesize a clear summary of the project's current status, the progress made, and the definitions established during this session.

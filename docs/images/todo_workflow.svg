@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main background -->
+  <rect x="0" y="0" width="800" height="500" fill="#f8f9fa" />
+
+  <!-- Title -->
+  <text x="400" y="30" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#333">TODO System Workflow</text>
+
+  <!-- Files -->
+  <rect x="50" y="70" width="180" height="90" rx="5" ry="5" fill="#fff" stroke="#6c757d" stroke-width="2" />
+  <text x="140" y="95" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Context Files</text>
+  <text x="140" y="120" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Project Context</text>
+  <text x="140" y="140" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Ticket Context</text>
+
+  <rect x="50" y="200" width="180" height="90" rx="5" ry="5" fill="#fff3bf" stroke="#f59f00" stroke-width="2" />
+  <text x="140" y="225" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">TODO Files</text>
+  <text x="140" y="250" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Per-context TODOs</text>
+  <text x="140" y="270" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Status tracking</text>
+
+  <rect x="50" y="330" width="180" height="90" rx="5" ry="5" fill="#d3f9d8" stroke="#40c057" stroke-width="2" />
+  <text x="140" y="355" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Git Integration</text>
+  <text x="140" y="380" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Diffs analysis</text>
+  <text x="140" y="400" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Automatic updates</text>
+
+  <!-- CopilotChat -->
+  <rect x="570" y="180" width="180" height="90" rx="5" ry="5" fill="#e9d8fd" stroke="#805ad5" stroke-width="2" />
+  <text x="660" y="205" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">CopilotChat</text>
+  <text x="660" y="230" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- AI-powered analysis</text>
+  <text x="660" y="250" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">- Task suggestions</text>
+
+  <!-- Process Box -->
+  <rect x="300" y="150" width="200" height="150" rx="5" ry="5" fill="#b2f5ea" stroke="#319795" stroke-width="2" />
+  <text x="400" y="175" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">TODO Management</text>
+  <text x="400" y="200" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">1. Generate TODOs</text>
+  <text x="400" y="220" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">2. Track progress</text>
+  <text x="400" y="240" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">3. Update context</text>
+  <text x="400" y="260" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">4. Sync after commits</text>
+  <text x="400" y="280" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">5. UI for management</text>
+
+  <!-- Flow arrows -->
+  <!-- Context -> Process -->
+  <line x1="230" y1="115" x2="299" y2="170" stroke="#333" stroke-width="2" />
+  <polygon points="299,170 294,162 289,170" fill="#333" />
+  <text x="260" y="130" font-family="Arial" font-size="10" fill="#333">Read</text>
+
+  <!-- Git -> Process -->
+  <line x1="230" y1="370" x2="300" y2="280" stroke="#333" stroke-width="2" />
+  <polygon points="300,280 291,280 296,288" fill="#333" />
+  <text x="260" y="340" font-family="Arial" font-size="10" fill="#333">Trigger</text>
+
+  <!-- Process -> TODO -->
+  <line x1="300" y1="225" x2="230" y2="225" stroke="#333" stroke-width="2" />
+  <polygon points="230,225 239,230 239,220" fill="#333" />
+  <text x="265" y="215" font-family="Arial" font-size="10" fill="#333">Update</text>
+
+  <!-- Process <-> CopilotChat -->
+  <line x1="500" y1="225" x2="570" y2="225" stroke="#333" stroke-width="2" />
+  <polygon points="570,225 561,220 561,230" fill="#333" />
+  <text x="535" y="215" font-family="Arial" font-size="10" fill="#333">Request</text>
+
+  <line x1="570" y1="240" x2="500" y2="240" stroke="#333" stroke-width="2" />
+  <polygon points="500,240 509,245 509,235" fill="#333" />
+  <text x="535" y="255" font-family="Arial" font-size="10" fill="#333">Response</text>
+
+  <!-- Process -> Context -->
+  <line x1="350" y1="150" x2="350" y2="110" stroke="#333" stroke-width="2" stroke-dasharray="5,5" />
+  <polygon points="350,110 345,118 355,118" fill="#333" />
+  <text x="360" y="130" font-family="Arial" font-size="10" fill="#333">Update</text>
+
+  <!-- User Interface -->
+  <rect x="300" y="350" width="200" height="70" rx="5" ry="5" fill="#ffdeeb" stroke="#f06595" stroke-width="2" />
+  <text x="400" y="380" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">CopilotTodoSplit</text>
+  <text x="400" y="400" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">Interactive UI</text>
+
+  <!-- Process <-> UI -->
+  <line x1="400" y1="300" x2="400" y2="350" stroke="#333" stroke-width="2" />
+  <polygon points="400,350 405,342 395,342" fill="#333" />
+  <text x="410" y="330" font-family="Arial" font-size="10" fill="#333">Display</text>
+
+  <!-- Commands -->
+  <rect x="570" y="350" width="180" height="90" rx="5" ry="5" fill="#bee3f8" stroke="#3182ce" stroke-width="2" />
+  <text x="660" y="375" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">Commands</text>
+  <text x="660" y="400" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotGenerateTodo</text>
+  <text x="660" y="420" font-family="Arial" font-size="12" text-anchor="middle" fill="#333">:CopilotTodoSplit</text>
+
+  <!-- Commands -> UI -->
+  <line x1="570" y1="380" x2="500" y2="380" stroke="#333" stroke-width="2" />
+  <polygon points="500,380 509,385 509,375" fill="#333" />
+  <text x="535" y="370" font-family="Arial" font-size="10" fill="#333">Invoke</text>
+</svg>
