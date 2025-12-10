@@ -4,27 +4,27 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
-Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
-Analiza el proyecto detectando automáticamente el stack tecnológico principal según los archivos presentes: ##files://glob/**.*
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
+Analyze the project by automatically detecting the main technology stack based on the files present: ##files://glob/**.*
 
-- Si detectas más de un stack, pregunta cuál debe usarse.
-- Incluye patrones de archivos relevantes, archivos de infraestructura y contenedores si existen.
-- Analiza todos los archivos de documentación Markdown (*.md) ##files://glob/**.md y utiliza su contenido para enriquecer el contexto y el análisis.
-- Si necesitas más información, solicita la estructura del proyecto o acceso a archivos específicos.
+- If you detect more than one stack, ask which one should be used.
+- Include patterns of relevant files, infrastructure files, and containers if they exist.
+- Analyze all Markdown documentation files (*.md) ##files://glob/**.md and use their content to enrich the context and analysis.
+- If you need more information, request the project structure or access to specific files.
 
-Proporciona:
-- Resumen del propósito del proyecto
-- Estructura general y organización de componentes
-- Áreas de mejora en arquitectura, código y buenas prácticas
-- Análisis de dependencias y recomendaciones
-- Sugerencias para documentación y contexto
-- Recomendaciones de CI/CD (por ejemplo: Buildkite, CircleCI)
-- Mejores prácticas de seguridad y rendimiento
-- Otros aspectos relevantes
+Provide:
+- Summary of the project purpose
+- General structure and component organization
+- Areas for improvement in architecture, code, and best practices
+- Dependency analysis and recommendations
+- Suggestions for documentation and context
+- CI/CD recommendations (for example: Buildkite, CircleCI)
+- Security and performance best practices
+- Other relevant aspects
 
-Mantén este contexto para futuras consultas.
-Importante, este resultado no interactuará con el usuario, por lo que no solicites preguntas, en su lugar agrega puntos en el resultado
-para ser tratados con el usuario cuando sea el momento.
+Keep this context for future consultations.
+Important, this result will not interact with the user, so do not ask questions, instead add points in the result
+to be addressed with the user when the time comes.
 ]]
 
 return M

@@ -4,21 +4,21 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
-Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
-Sintetiza el contexto actual del proyecto de forma autocontenida y reutilizable. Usa solo la información disponible, sin introducciones ni despedidas, y no dejes tareas pendientes.
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
+Synthesize the current project context in a self-contained and reusable way. Use only the available information, without introductions or farewells, and don't leave pending tasks.
 
-Incluye:
-- Stack tecnológico principal
-- Dependencias clave
-- Estructura general del proyecto (resumen de archivos relevante)
-- Cambios recientes en el branch actual respecto a main
-- Áreas de mejora y recomendaciones concretas
-- Buenas prácticas aplicadas o sugeridas
+Include:
+- Main technology stack
+- Key dependencies
+- General project structure (summary of relevant files)
+- Recent changes in the current branch compared to main
+- Areas for improvement and specific recommendations
+- Good practices applied or suggested
 
-Al final, proporciona un resumen de alto nivel del contexto detectado. Elige el formato más adecuado según el tipo de proyecto: puede ser un diagrama ASCII, un gráfico DOT, o una lista de temas principales. Este resumen debe ser claro y servir como introducción para futuras sesiones de chat.
+At the end, provide a high-level summary of the detected context. Choose the most appropriate format according to the project type: it can be an ASCII diagram, a DOT graph, or a list of main topics. This summary should be clear and serve as an introduction for future chat sessions.
 
-Archivos relevantes: #glob:**/*
-Cambios recientes respecto a main: #gitdiff:main..HEAD
+Relevant files: #glob:**/*
+Recent changes compared to main: #gitdiff:main..HEAD
 ]]
 
 return M

@@ -2,33 +2,35 @@
 local options = require("copilotchatassist.options")
 local M = {}
 
+local log = require("copilotchatassist.utils.log")
+
 function M.default(full_context, ticket_context, existing_todo)
-  -- Obtener los valores actuales de las opciones
-  local user_language = options.get().language
-  local code_language = options.get().code_language
+  -- Get current option values
+  local user_language = options.get().language or "english"
+  local code_language = options.get().code_language or "lua"
 
-  -- Crear el inicio del prompt con los valores reales de lenguaje insertados
-  local prompt_start = string.format([[Siempre usando el lenguaje %s para nuestra interaccion y lo relacionado a los TODOS, sin traducir codigo o elementos del código
-, y el lenguaje %s para todo lo relacionado al código, documentacion, debugs.
+  log.debug({
+    english = "Using language for TODOs: " .. user_language,
+    spanish = "Usando idioma para TODOs: " .. user_language
+  })
 
-IMPORTANTE: Todas las tareas, categorías, títulos y descripciones en la tabla deben generarse en %s. No solo el formato de la tabla sino también su contenido debe estar completamente en %s.
+  -- Create the start of the prompt with actual language values inserted
+  local prompt_start = string.format([[Always using language %s for our interaction and everything related to TODOs, without translating code or code elements, and language %s for everything related to code, documentation, debugging.]], user_language, code_language)
 
-Asegúrate de que las categorías como 'testing', 'feature', 'refactor', 'docs', etc. y todos los valores de la tabla estén en el idioma %s.]], user_language, code_language, user_language, user_language, user_language)
-
-  -- Adaptar etiquetas según el idioma
+  -- Adapt labels based on the language
   local status_labels = {
-    todo = (user_language == "spanish") and "PENDIENTE" or "TODO",
-    in_progress = (user_language == "spanish") and "EN PROGRESO" or "IN PROGRESS",
-    done = (user_language == "spanish") and "COMPLETADO" or "DONE"
+    todo = (user_language:lower() == "spanish") and "PENDIENTE" or "TODO",
+    in_progress = (user_language:lower() == "spanish") and "EN PROGRESO" or "IN PROGRESS",
+    done = (user_language:lower() == "spanish") and "COMPLETADO" or "DONE"
   }
 
-  -- Construir etiquetas para status según el idioma
-  local status_text = string.format([[Para el status, usar palabras solamente, estandarizandolas para poder parsearlas posteriormente, %s, %s, %s]],
+  -- Build status labels based on language
+  local status_text = string.format([[For status, use words only, standardizing them for later parsing, %s, %s, %s]],
     status_labels.done, status_labels.in_progress, status_labels.todo)
 
-  -- Definir mensajes según el idioma
+  -- Define messages based on language
   local prompt_messages = {}
-  if user_language == "spanish" then
+  if user_language:lower() == "spanish" then
     prompt_messages = {
       update_context = "Usa el siguiente contexto global para actualizar el archivo TODO del ticket.",
       tasks_related = "- Las tareas deben estar relacionadas con el contexto del ticket, no con el contexto completo",

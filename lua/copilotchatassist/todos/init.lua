@@ -167,7 +167,9 @@ local function extract_todo_title(lines)
 end
 
 local function show_task_details(task)
-  local lang = i18n.get_current_language()
+  -- Asegurarnos de obtener el idioma directamente de la configuración
+  local options = require("copilotchatassist.options")
+  local lang = options.get().language or "english"
   local labels = {}
 
   if lang == "spanish" then
@@ -369,7 +371,10 @@ function M.filter_tasks_by_status(status, buf)
     end
   end
 
-  local title = i18n.get_current_language() == "spanish"
+  -- Obtener idioma directamente de opciones
+  local options = require("copilotchatassist.options")
+  local lang = options.get().language or "english"
+  local title = lang:lower() == "spanish"
     and ("Filtrado por estado: " .. status)
     or ("Filtered by status: " .. status)
   M.display_filtered_tasks(filtered_tasks, buf, title)
@@ -392,7 +397,10 @@ function M.filter_tasks_by_priority(priority, buf)
     end
   end
 
-  local title = i18n.get_current_language() == "spanish"
+  -- Obtener idioma directamente de opciones
+  local options = require("copilotchatassist.options")
+  local lang = options.get().language or "english"
+  local title = lang:lower() == "spanish"
     and ("Filtrado por prioridad: " .. priority)
     or ("Filtered by priority: " .. priority)
   M.display_filtered_tasks(filtered_tasks, buf, title)
@@ -631,7 +639,7 @@ function M.open_todo_split()
         reload_todo_split(bufnr)
       end)
     end,
-    desc = i18n.get_current_language() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
+    desc = options.get().language:lower() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
   })
 
   -- Añadir mapeo para filtrar por estado
@@ -884,7 +892,7 @@ function M.generate_todo(callback)
         content = content:gsub("Total Tareas:", "Total Tasks:")
         content = content:gsub("Total pendientes:", "Total pending:")
         content = content:gsub("Total listas:", "Total completed:")
-        content = content:gsub("\% avance:", "\% progress:")
+        content = content:gsub("%% avance:", "%% progress:")
       end
 
       file_utils.write_file(paths.todo_path, content or "")

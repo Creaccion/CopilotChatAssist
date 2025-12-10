@@ -4,16 +4,16 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
-Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
-Enriquece la síntesis del ticket agregando:
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
+Enrich the ticket synthesis by adding:
 
-- Tareas pendientes, numeradas y con checks
-- Problemas por solucionar, con breve descripción
-- Contexto actualizado según los cambios recientes
-- Recomendaciones para avanzar y cerrar el ticket
+- Pending tasks, numbered and with checks
+- Problems to solve, with brief description
+- Updated context according to recent changes
+- Recommendations to progress and close the ticket
 
-Mantén la información organizada y lista para actualizar el contexto del ticket.
-No incluyas introducciones ni despedidas.
+Keep the information organized and ready to update the ticket context.
+Do not include introductions or farewells.
 ]]
 
 return M

@@ -4,9 +4,9 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
-Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
-Propon una estructura de archivos para el requerimiento: <requirement>.
-Usa bloques de código con path y contenido/documentación inicial.
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
+Propose a file structure for the requirement: <requirement>.
+Use code blocks with path and initial content/documentation.
 ]]
 
 return M

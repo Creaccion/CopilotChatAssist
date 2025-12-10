@@ -4,18 +4,18 @@ local options = require("copilotchatassist.options")
 local M = {}
 
 M.default = [[
-Siempre usando el lenguage ]] .. options.language .. [[ para nuestra interaccion, y el lenguaje ]] .. options.code_language .. [[ para todo lo relacionado al código, documentacion, debugs. 
-Sintetiza el contexto del ticket actual incluyendo:
+Always using language ]] .. options.language .. [[ for our interaction, and language ]] .. options.code_language .. [[ for everything related to code, documentation, debugging.
+Synthesize the current ticket context including:
 
-- Stack tecnológico principal y dependencias relevantes
-- Cambios realizados en la rama respecto a main
-- Requerimiento asociado y enlace a Jira (si aplica)
-- Lista de tareas pendientes y avances
-- Áreas de mejora y recomendaciones específicas para el ticket
-- Problemas detectados y sugerencias de solución
+- Main technology stack and relevant dependencies
+- Changes made in the branch with respect to main
+- Associated requirement and Jira link (if applicable)
+- List of pending tasks and progress
+- Areas for improvement and specific recommendations for the ticket
+- Detected problems and solution suggestions
 
-Presenta la información de forma clara y estructurada, lista para ser reutilizada en futuras sesiones.
-Responde exclusivamente en español a menos que el usuario pida explícitamente otro idioma.
+Present the information in a clear and structured manner, ready to be reused in future sessions.
+Respond exclusively in the configured language unless the user explicitly requests another language.
 ]]
 
 return M
