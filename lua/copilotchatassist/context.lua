@@ -93,7 +93,8 @@ Responde exclusivamente en español a menos que el usuario pida explícitamente 
     headless = true,
     callback = function(response)
       file_utils.write_file(context_path, response or "")
-      vim.notify("Context updated: " .. context_path, vim.log.levels.INFO)
+      -- Command completion - show at INFO level
+      vim.notify("Context updated", vim.log.levels.INFO, { timeout = 2000 })
       if callback then callback() end
     end
   })
@@ -295,7 +296,8 @@ function M.analyze_ticket_context(requirement)
     callback = function(response)
       local paths = M.get_context_paths()
       file_utils.write_file(paths.synthesis, response or "")
-      vim.notify("Ticket context synthesis saved: " .. paths.synthesis, vim.log.levels.INFO)
+      -- Command completion - show at INFO level
+      vim.notify("Ticket context synthesis saved", vim.log.levels.INFO, { timeout = 2000 })
     end
   })
 end
@@ -350,7 +352,7 @@ function M.ask_should_update_context(requirement, synthesis, type)
           M.analyze_ticket_context(requirement)
         end
       else
-        vim.notify("Context update not required for " .. type .. ".", vim.log.levels.INFO)
+        log.debug("Context update not required for " .. type .. ".")
       end
     end
   })

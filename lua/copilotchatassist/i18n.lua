@@ -169,9 +169,10 @@ M.supported_languages = {
 -- Obtener el idioma actual configurado
 -- @return string: El código del idioma actual
 function M.get_current_language()
+  -- Always prioritize the configured language from options
   local lang = options.get().language or "english"
   if not M.supported_languages[lang] then
-    log.warn("Idioma no soportado: " .. lang .. ". Se usará inglés como predeterminado.")
+    log.debug("Idioma no soportado: " .. lang .. ". Se usará inglés como predeterminado.")
     lang = "english"
   end
   return lang
@@ -402,12 +403,8 @@ function M.translate_text(text, target_lang, callback)
       source_lang, target_lang, text
     )
 
-    -- Mostrar notificación de inicio
-    local notify_id = vim.notify("Traduciendo texto...", vim.log.levels.INFO, {
-      title = "Traducción",
-      timeout = false,
-      replace = notify_id
-    })
+    -- Log translation activity but don't show notification
+    log.debug("Traduciendo texto...")
 
     -- Configurar un timeout por si la solicitud nunca retorna
     result.timeout_timer = vim.defer_fn(function()
@@ -423,13 +420,8 @@ function M.translate_text(text, target_lang, callback)
 
         vim.cmd("echo ''") -- Limpiar mensaje
 
-        -- Mostrar notificación de timeout
-        vim.notify("Timeout en la traducción. Se usará el texto original.",
-                  vim.log.levels.WARN, {
-                    title = "Traducción",
-                    timeout = 3000,
-                    replace = notify_id
-                  })
+        -- Log timeout, don't show notification
+        log.warn("Timeout en la traducción. Se usará el texto original.")
 
         -- Devolver el texto original ya que falló la traducción
         if callback then
@@ -486,12 +478,8 @@ function M.translate_text(text, target_lang, callback)
             f:close()
           end
 
-          -- Notificar éxito
-          vim.notify("Traducción completada con éxito.", vim.log.levels.INFO, {
-            title = "Traducción",
-            timeout = 3000,
-            replace = notify_id
-          })
+          -- Command completion - show at INFO level
+          vim.notify("Translation complete.", vim.log.levels.INFO, { timeout = 2000 })
 
           -- Llamar al callback con el resultado
           if callback then
@@ -500,13 +488,8 @@ function M.translate_text(text, target_lang, callback)
         else
           log.error("Error en la traducción: respuesta vacía o inválida")
 
-          -- Notificar error
-          vim.notify("Error en la traducción. Se usará el texto original.",
-                    vim.log.levels.ERROR, {
-                      title = "Traducción",
-                      timeout = 3000,
-                      replace = notify_id
-                    })
+          -- Log error, don't show notification
+          log.error("Error en la traducción. Se usará el texto original.")
 
           -- Llamar al callback con el texto original
           if callback then

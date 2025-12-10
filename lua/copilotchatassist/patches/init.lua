@@ -67,9 +67,10 @@ function M.process_current_buffer()
   end
 
   if count > 0 then
-    log.info("Se encontraron " .. count .. " nuevos patches")
+    -- Command completion - show at INFO level
+    vim.notify("Found " .. count .. " new patches.", vim.log.levels.INFO, { timeout = 2000 })
   else
-    log.info("No se encontraron nuevos patches")
+    log.debug("No new patches found.")
   end
 
   return count
@@ -96,7 +97,8 @@ function M.clear_patch_queue()
     M.state.patch_queue:clear()
   end
 
-  log.info("Cola de patches limpiada")
+  -- Command completion - show at INFO level
+  vim.notify("Patch queue cleared.", vim.log.levels.INFO, { timeout = 2000 })
 end
 
 -- Aplicar todos los patches en la cola

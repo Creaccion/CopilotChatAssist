@@ -32,12 +32,18 @@ local api = vim.api
 
 -- Estandarización de iconos de estado
 local status_icons = {
-  -- Versiones en mayúsculas
+  -- Versiones en mayúsculas (inglés)
   ["DONE"] = "✅",
   ["TODO"] = "⬜",
   ["PENDING"] = "⬜",
   ["IN_PROGRESS"] = "🔄",
   ["IN PROGRESS"] = "🔄",
+
+  -- Versiones en mayúsculas (español)
+  ["COMPLETADO"] = "✅",
+  ["PENDIENTE"] = "⬜",
+  ["EN PROGRESO"] = "🔄",
+  ["EN_PROGRESO"] = "🔄",
 
   -- Versiones con iconos
   ["✅ DONE"] = "✅",
@@ -46,12 +52,18 @@ local status_icons = {
   ["✅"] = "✅",
   ["⬜"] = "⬜",
 
-  -- Versiones en minúsculas
+  -- Versiones en minúsculas (inglés)
   ["done"] = "✅",
   ["todo"] = "⬜",
   ["pending"] = "⬜",
   ["in_progress"] = "🔄",
   ["in progress"] = "🔄",
+
+  -- Versiones en minúsculas (español)
+  ["completado"] = "✅",
+  ["pendiente"] = "⬜",
+  ["en progreso"] = "🔄",
+  ["en_progreso"] = "🔄",
 }
 
 -- Parsea el archivo markdown de TODOs y extrae las tareas
@@ -826,13 +838,67 @@ function M.generate_todo(callback)
         content = vim.inspect(response)
       end
 
+      -- Guardamos la respuesta raw para debug
+      local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+      vim.fn.mkdir(debug_dir, "p")
+      local raw_file = debug_dir .. "/todo_raw.txt"
+      local raw_debug_file = io.open(raw_file, "w")
+      if raw_debug_file then
+        raw_debug_file:write(content or "")
+        raw_debug_file:close()
+      end
+
+      -- Verificar si necesitamos traducir el contenido
+      local user_language = options.get().language
+      local current_language = nil
+
+      -- Detectar idioma actual del contenido con más patrones
+      if content and (content:match("integración") or content:match("validación") or
+         content:match("documentación") or content:match("PENDIENTE") or content:match("Total Tareas") or
+         content:match("pendientes") or content:match("listas") or content:match("%% avance") or
+         content:match("refactor") or content:match("implementar") or content:match("revisar")) then
+        current_language = "spanish"
+        log.debug({
+          english = "Detected Spanish content in the response",
+          spanish = "Se detectó contenido en español en la respuesta"
+        })
+      else
+        current_language = "english"
+        log.debug({
+          english = "Detected English content or no specific pattern matched",
+          spanish = "Se detectó contenido en inglés o ningún patrón específico coincidió"
+        })
+      end
+
+      -- Si el idioma actual no coincide con el configurado, realizar traducción
+      if current_language ~= user_language and user_language == "english" and content then
+        log.debug({
+          english = "Content language doesn't match configured language. Translating from Spanish to English",
+          spanish = "El idioma del contenido no coincide con el idioma configurado. Traduciendo de español a inglés"
+        })
+
+        -- Realizar traducciones específicas para categorías y estados
+        content = content:gsub("integración", "integration")
+        content = content:gsub("validación", "validation")
+        content = content:gsub("documentación", "documentation")
+        content = content:gsub("interfaz", "interface")
+        content = content:gsub("testing", "testing")
+        content = content:gsub("formato", "format")
+        content = content:gsub("core", "core")
+        content = content:gsub("TODO", "TODO")
+        content = content:gsub("PENDIENTE", "TODO")
+        content = content:gsub("EN PROGRESO", "IN PROGRESS")
+        content = content:gsub("COMPLETADO", "DONE")
+        content = content:gsub("Total Tareas:", "Total Tasks:")
+        content = content:gsub("Total pendientes:", "Total pending:")
+        content = content:gsub("Total listas:", "Total completed:")
+        content = content:gsub("\% avance:", "\% progress:")
+      end
+
       file_utils.write_file(paths.todo_path, content or "")
 
-      -- Notificar usando el módulo de log con traducción automática
-      log.info({
-        english = "Project TODOs saved: " .. paths.todo_path,
-        spanish = "TODOs del proyecto guardados en: " .. paths.todo_path
-      })
+      -- Command completion - show simple notification at INFO level
+      vim.notify("TODOs updated.", vim.log.levels.INFO, { timeout = 2000 })
 
       -- Si hay callback, ejecutarla
       if callback and type(callback) == "function" then
@@ -861,10 +927,8 @@ function M.implement_task(task)
   local patches_module = require("copilotchatassist.patches")
   copilot_api.implement_task(task, function(response, patches_count)
     if patches_count > 0 then
-      log.info({
-        english = string.format("Generated %d patches. Use :CopilotPatchesWindow to review them.", patches_count),
-        spanish = string.format("Se generaron %d patches. Usa :CopilotPatchesWindow para revisarlos.", patches_count)
-      })
+      -- Command completion - show at INFO level with simple message
+      vim.notify(string.format("Task implementation generated %d patches.", patches_count), vim.log.levels.INFO, { timeout = 2000 })
 
       -- Preguntar si desea ver los patches ahora
       vim.defer_fn(function()
@@ -883,10 +947,8 @@ function M.implement_task(task)
         end)
       end, 500)
     else
-      log.info({
-        english = "No code patches were generated for this task",
-        spanish = "No se generaron patches de código para esta tarea"
-      })
+      -- Command completion - show at INFO level with simple message
+      vim.notify("Task implementation complete. No patches generated.", vim.log.levels.INFO, { timeout = 2000 })
     end
 
     -- Si la tarea estaba pendiente, marcarla como en progreso
