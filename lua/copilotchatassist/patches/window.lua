@@ -163,7 +163,7 @@ end
 function M.show_patch_queue(patch_queue)
   if not patch_queue or not patch_queue.items then
     log.warn("Cola de patches inválida para visualización")
-    vim.notify("No hay patches disponibles para mostrar", vim.log.levels.INFO)
+    log.debug("No hay patches disponibles para mostrar")
     return
   end
 
@@ -172,7 +172,8 @@ function M.show_patch_queue(patch_queue)
   local message = string.format("Patches: %d total, %d pendientes, %d aplicados, %d fallidos",
     stats.total, stats.pending, stats.applied, stats.failed)
 
-  vim.notify(message, vim.log.levels.INFO)
+  -- Important command completion notification
+  vim.notify("Patches window opened.", vim.log.levels.INFO, { timeout = 2000 })
 
   -- Si no hay patches, no mostrar más
   if stats.total == 0 then
@@ -225,23 +226,23 @@ function M.show_patch_details()
 
   -- Los primeros 3 líneas son el encabezado
   if line <= 3 then
-    vim.notify("No hay un patch seleccionado", vim.log.levels.INFO)
+    log.debug("No hay un patch seleccionado")
     return
-  }
+  end
 
   -- Calcular índice del patch (línea - 3)
   local patch_index = line - 3
   if patch_index > #M.state.patches then
-    vim.notify("Índice de patch inválido", vim.log.levels.WARN)
+    log.debug("Índice de patch inválido")
     return
-  }
+  end
 
   M.state.selected_patch = patch_index
   local patch = M.state.patches[patch_index]
   if not patch then
-    vim.notify("Patch no encontrado", vim.log.levels.WARN)
+    log.debug("Patch no encontrado")
     return
-  }
+  end
 
   -- Crear líneas para mostrar
   local detail_lines = {
@@ -292,7 +293,7 @@ function M.show_patch_details()
 -- Aplicar el patch seleccionado
 function M.apply_selected_patch()
   if not M.state.selected_patch or not M.state.patches[M.state.selected_patch] then
-    vim.notify("No hay un patch seleccionado para aplicar", vim.log.levels.INFO)
+    log.debug("No hay un patch seleccionado para aplicar")
     return
   end
 
@@ -304,7 +305,7 @@ function M.apply_selected_patch()
   local patch_queue = patches.get_patch_queue()
 
   if not patch_queue or not patch_queue.items or not patch_queue.items[visual_patch.id] then
-    vim.notify("No se puede encontrar el patch en la cola", vim.log.levels.WARN)
+    log.debug("No se puede encontrar el patch en la cola")
     return
   }
 
@@ -322,16 +323,17 @@ function M.apply_selected_patch()
     -- Refrescar ventana
     M.refresh_window()
 
-    vim.notify("Patch aplicado correctamente", vim.log.levels.INFO)
+    -- Command completion - show at INFO level
+    vim.notify("Patch applied successfully.", vim.log.levels.INFO, { timeout = 2000 })
   })
 }
 
 -- Eliminar el patch seleccionado
 function M.remove_selected_patch()
   if not M.state.selected_patch or not M.state.patches[M.state.selected_patch] then
-    vim.notify("No hay un patch seleccionado para eliminar", vim.log.levels.INFO)
+    log.debug("No hay un patch seleccionado para eliminar")
     return
-  }
+  end
 
   local patch_index = M.state.selected_patch
   local visual_patch = M.state.patches[patch_index]
@@ -341,7 +343,7 @@ function M.remove_selected_patch()
   local patch_queue = patches.get_patch_queue()
 
   if not patch_queue or not patch_queue.items or not patch_queue.items[visual_patch.id] then
-    vim.notify("No se puede encontrar el patch en la cola", vim.log.levels.WARN)
+    log.debug("No se puede encontrar el patch en la cola")
     return
   }
 
@@ -360,7 +362,8 @@ function M.remove_selected_patch()
   -- Refrescar ventana
   M.refresh_window()
 
-  vim.notify("Patch eliminado correctamente", vim.log.levels.INFO)
+  -- Command completion - show at INFO level
+  vim.notify("Patch deleted successfully.", vim.log.levels.INFO, { timeout = 2000 })
 }
 
 -- Mostrar ayuda
