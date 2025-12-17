@@ -60,6 +60,7 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 - `:CopilotTicket` - Abre o crea contexto para el ticket/rama actual
 - `:CopilotUpdateContext` - Actualiza el contexto del proyecto y ticket
 - `:CopilotProjectContext` - Genera contexto del proyecto
+- `:CopilotSynthetize` - Sintetiza información del contexto
 
 ### Gestión de TODOs
 
@@ -77,13 +78,17 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 ### Generación de documentación y PRs
 
 - `:CopilotEnhancePR` - Genera o mejora la descripción de PR
-- `:CopilotAgentPR` - Utiliza agente avanzado para generar PRs
+- `:CopilotChangePRLanguage` - Cambia idioma de la descripción del PR
+- `:CopilotSimplePRLanguage` - Versión simplificada para cambiar idioma del PR
 - `:CopilotDocReview` - Revisa documentación actual
 - `:CopilotDocChanges` - Documenta cambios recientes
+- `:CopilotDocGitChanges` - Documenta elementos modificados según el diff git
+- `:CopilotDocScan` - Escanea en busca de elementos sin documentación
+- `:CopilotDocSync` - Sincroniza documentación (actualiza o genera)
+- `:CopilotDocGenerate` - Genera documentación para el elemento en el cursor
 
-### Síntesis y estructuración
+### Visualización y estructura
 
-- `:CopilotSynthetize` - Sintetiza información del contexto
 - `:CopilotStructure` - Genera estructura de proyecto
 - `:CopilotDot` - Genera diagramas en formato DOT
 - `:CopilotDotPreview` - Vista previa de diagramas DOT
@@ -100,6 +105,26 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 6. Marca las tareas como completadas
 7. Genera descripción de PR con `:CopilotEnhancePR`
 
+## Arquitectura del Plugin
+
+El plugin ha sido simplificado y reorganizado con la siguiente estructura:
+
+### Núcleo
+- **init.lua**: Punto de entrada, configuración y comandos organizados por categoría
+- **copilotchat_api.lua**: API simplificada para interactuar con CopilotChat
+- **options.lua**: Gestión de opciones y configuraciones
+
+### Prompts
+- **prompts/context.lua**: Sistema modular de prompts para contexto, síntesis y análisis
+- **prompts/system.lua**: Prompts del sistema y plantillas base
+- **prompts/todo_requests.lua**: Prompts relacionados con generación y gestión de TODOs
+
+### Módulos funcionales
+- **context.lua**: Gestión del contexto de trabajo y tickets
+- **todos/**: Sistema de gestión de TODOs
+- **patches.lua**: Sistema de extracción y aplicación de patches de código
+- **pr_generator_i18n.lua**: Generación de descripciones de PR con soporte multiidioma
+
 ## Documentación adicional
 
 Para más detalles sobre el uso, consulta los siguientes recursos:
@@ -108,7 +133,19 @@ Para más detalles sobre el uso, consulta los siguientes recursos:
 - [Sistema de TODOs](docs/todo_system.md) - Documentación del sistema de TODOs
 - [Sistema de Patches](docs/patches_system.md) - Documentación del sistema de patches
 - [Configuración](docs/configuration.md) - Opciones de configuración detalladas
+- [Estado de implementación](implementation_status.md) - Información sobre el estado actual de la simplificación
 - [Resolución de problemas](docs/troubleshooting.md) - Guía de resolución de problemas
+
+## Cambios recientes
+
+El plugin ha sido sometido a una simplificación significativa para:
+
+1. **Eliminar código redundante**: Consolidación de archivos y módulos similares
+2. **Mejorar delegación**: Mayor aprovechamiento de las capacidades nativas de CopilotChat
+3. **Optimizar estructura**: Organización más clara y modular del código
+4. **Mejorar mantenibilidad**: Reducción de complejidad y duplicación
+
+Para más detalles, consulta el [estado de implementación](implementation_status.md).
 
 ## Resolución de problemas
 

@@ -5,6 +5,7 @@ local log = require("copilotchatassist.utils.log")
 local file_utils = require("copilotchatassist.utils.file")
 local copilot_api = require("copilotchatassist.copilotchat_api")
 local i18n = require("copilotchatassist.i18n")
+local options = require("copilotchatassist.options")
 
 -- Estado del módulo
 M.state = {

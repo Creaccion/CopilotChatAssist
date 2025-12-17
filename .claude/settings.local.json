@@ -14,7 +14,13 @@
       "Read(//Users/ralbertomerinocolipe/.cache/**)",
       "Bash(nvim:*)",
       "Bash(gh auth:*)",
-      "Bash(vim -c \"!echo ''Script corrected successfully!''\" -c q /Users/ralbertomerinocolipe/workspaces/personal/nvim/CopilotChatAssist/lua/copilotchatassist/prompts/todo_requests.lua)"
+      "Bash(vim -c \"!echo ''Script corrected successfully!''\" -c q /Users/ralbertomerinocolipe/workspaces/personal/nvim/CopilotChatAssist/lua/copilotchatassist/prompts/todo_requests.lua)",
+      "Read(//Users/ralbertomerinocolipe/.local/share/nvim/lazy/CopilotChat.nvim/**)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
