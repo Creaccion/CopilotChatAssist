@@ -93,8 +93,7 @@ Responde exclusivamente en español a menos que el usuario pida explícitamente 
     headless = true,
     callback = function(response)
       file_utils.write_file(context_path, response or "")
-      -- Command completion - show at INFO level
-      vim.notify("Context updated", vim.log.levels.INFO, { timeout = 2000 })
+      -- No mostrar ningún mensaje de contexto actualizado
       if callback then callback() end
     end
   })
@@ -102,7 +101,6 @@ end
 
 function M.copilot_tickets()
   local paths = M.get_context_paths()
-  print("Contextos: " .. vim.inspect(paths))
   local requirement = file_utils.read_file(paths.requirement)
   local ticket_synthesis = file_utils.read_file(paths.synthesis)
   local project_synthesis = file_utils.read_file(paths.project_context)
@@ -168,17 +166,18 @@ function M.copilot_tickets()
             table.insert(context_parts, "-- Project Synthesis --\n" .. updated_project_synthesis)
           end
 
-          print("# context_parts: " .. #context_parts)
-          print("context_parts: " .. vim.inspect(context_parts))
           if #context_parts > 0 then
-            print("Pre concat")
             local full_context = table.concat(context_parts, "\n\n")
-            vim.notify("Loaded combined context from available files.", vim.log.levels.INFO)
+            local i18n = require("copilotchatassist.i18n")
+            local notify = require("copilotchatassist.utils.notify")
+            notify.info(i18n.t("context.context_loaded_combined"))
             copilot_api.ask(full_context)
             return
           end
 
-          vim.notify("No context files found. Please create requirement or synthesis.", vim.log.levels.WARN)
+          local i18n = require("copilotchatassist.i18n")
+          local notify = require("copilotchatassist.utils.notify")
+          notify.warn(i18n.t("context.no_context_files"), {force = true})
         end
 
         -- Actualiza ticket y proyecto en serie, luego combina
@@ -248,17 +247,18 @@ function M.copilot_tickets()
       table.insert(context_parts, "-- Project Synthesis --\n" .. updated_project_synthesis)
     end
 
-    print("# context_parts: " .. #context_parts)
-    print("context_parts: " .. vim.inspect(context_parts))
     if #context_parts > 0 then
-      print("Pre concat")
       local full_context = table.concat(context_parts, "\n\n")
-      vim.notify("Loaded combined context from available files.", vim.log.levels.INFO)
+      local i18n = require("copilotchatassist.i18n")
+      local notify = require("copilotchatassist.utils.notify")
+      notify.info(i18n.t("context.context_loaded_combined"))
       copilot_api.ask(full_context)
       return
     end
 
-    vim.notify("No context files found. Please create requirement or synthesis.", vim.log.levels.WARN)
+    local i18n = require("copilotchatassist.i18n")
+    local notify = require("copilotchatassist.utils.notify")
+    notify.warn(i18n.t("context.no_context_files"), {force = true})
   end
 
   -- Actualiza ticket y proyecto en serie, luego combina
@@ -273,6 +273,14 @@ end
 
 -- Analyze and store global project context
 function M.analyze_project_context(requirement)
+  -- Iniciar spinner de progreso
+  local progress = require("copilotchatassist.utils.progress")
+  local spinner_id = "analyze_project_context"
+  progress.start_spinner(spinner_id, "Analyzing project context", {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
+
   local prompt = require("copilotchatassist.prompts.global_context").default
   local message = prompt .. "\n" .. requirement
   copilot_api.ask(message, {
@@ -282,13 +290,35 @@ function M.analyze_project_context(requirement)
       local project = utils.get_project_name()
       local path = context_dir .. "/" .. project .. "_project_synthesis.md"
       file_utils.write_file(path, response or "")
-      vim.notify("Project context synthesis saved: " .. path, vim.log.levels.INFO)
+
+      -- Mostrar éxito con spinner
+      progress.stop_spinner(spinner_id, true)
+
+      -- Iniciar spinner final para mostrar el resultado
+      local complete_spinner_id = "project_context_complete"
+      progress.start_spinner(complete_spinner_id, "Project context synthesized", {
+        style = options.get().progress_indicator_style,
+        position = "statusline"
+      })
+
+      -- Detener spinner después de 2 segundos
+      vim.defer_fn(function()
+        progress.stop_spinner(complete_spinner_id, true)
+      end, 2000)
     end
   })
 end
 
 -- Analyze and store ticket context
 function M.analyze_ticket_context(requirement)
+  -- Iniciar spinner de progreso
+  local progress = require("copilotchatassist.utils.progress")
+  local spinner_id = "analyze_ticket_context"
+  progress.start_spinner(spinner_id, "Analyzing ticket context", {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
+
   local prompt = require("copilotchatassist.prompts.ticket_synthesis").default
   local message = prompt .. "\n" .. requirement
   copilot_api.ask(message, {
@@ -296,8 +326,21 @@ function M.analyze_ticket_context(requirement)
     callback = function(response)
       local paths = M.get_context_paths()
       file_utils.write_file(paths.synthesis, response or "")
-      -- Command completion - show at INFO level
-      vim.notify("Ticket context synthesis saved", vim.log.levels.INFO, { timeout = 2000 })
+
+      -- Mostrar éxito con spinner
+      progress.stop_spinner(spinner_id, true)
+
+      -- Iniciar spinner final para mostrar el resultado
+      local complete_spinner_id = "ticket_context_complete"
+      progress.start_spinner(complete_spinner_id, "Ticket context synthesized", {
+        style = options.get().progress_indicator_style,
+        position = "statusline"
+      })
+
+      -- Detener spinner después de 2 segundos
+      vim.defer_fn(function()
+        progress.stop_spinner(complete_spinner_id, true)
+      end, 2000)
     end
   })
 end

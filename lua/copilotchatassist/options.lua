@@ -10,6 +10,16 @@ local M = {
   todo_split_orientation = "vertical",
   todo_split_width = 50,
   todo_split_height = 30,
+  code_review_window_orientation = "vertical",
+  code_review_window_width = 50,
+  code_review_window_height = 30,
+  code_review_keep_window_open = true,
+  notification_level = vim.log.levels.INFO,       -- Nivel de las notificaciones normales
+  notification_timeout = 2000,                    -- Tiempo de las notificaciones en ms
+  success_notification_level = vim.log.levels.INFO, -- Nivel para notificaciones de éxito
+  silent_mode = false,                            -- Si es true, reduce el número de notificaciones
+  use_progress_indicator = true,                  -- Si es true, muestra indicadores de progreso para operaciones largas
+  progress_indicator_style = "dots",              -- Estilo del spinner: dots, line, braille, circle, moon, arrow, bar
 }
 
 -- Default highlight groups for TODO priorities (can be overridden by user)
@@ -47,6 +57,7 @@ function M.get_copilotchat_config()
     model = M.model,
     temperature = M.temperature,       -- Lower = focused, higher = creative
     system_prompt = require("copilotchatassist.prompts.system").default,
+    show_notification = false,         -- Disable CopilotChat notifications
     window = {
       layout = "horizontal",
       width = 150,

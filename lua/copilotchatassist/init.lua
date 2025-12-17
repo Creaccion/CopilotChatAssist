@@ -103,6 +103,45 @@ local function create_commands()
     require("copilotchatassist.dot_preview").dot_preview()
   end, {})
 
+  -- Comandos para Code Review
+  vim.api.nvim_create_user_command("CopilotCodeReview", function()
+    require("copilotchatassist.code_review").start_review()
+  end, {
+    desc = "Iniciar Code Review de los cambios en Git diff"
+  })
+
+  vim.api.nvim_create_user_command("CopilotCodeReviewList", function()
+    require("copilotchatassist.code_review").show_review_comments()
+  end, {
+    desc = "Mostrar lista de comentarios del Code Review"
+  })
+
+  vim.api.nvim_create_user_command("CopilotCodeReviewStats", function()
+    require("copilotchatassist.code_review").show_review_stats()
+  end, {
+    desc = "Mostrar estadísticas del Code Review actual"
+  })
+
+  vim.api.nvim_create_user_command("CopilotCodeReviewExport", function(opts)
+    local path = opts.args ~= "" and opts.args or nil
+    require("copilotchatassist.code_review").export_review(path)
+  end, {
+    desc = "Exportar Code Review a archivo JSON",
+    nargs = "?"
+  })
+
+  vim.api.nvim_create_user_command("CopilotCodeReviewReanalyze", function()
+    require("copilotchatassist.code_review").reanalyze_diff()
+  end, {
+    desc = "Re-analizar cambios en el diff para actualizar estado de comentarios"
+  })
+
+  vim.api.nvim_create_user_command("CopilotCodeReviewReset", function()
+    require("copilotchatassist.code_review").reset_review()
+  end, {
+    desc = "Reiniciar/limpiar la revisión de código actual"
+  })
+
   -- Comandos para patches (migrados desde CopilotFiles)
   vim.api.nvim_create_user_command("CopilotPatchesWindow", function()
     require("copilotchatassist.patches").show_patch_window()
@@ -143,6 +182,45 @@ local function create_commands()
     desc = "Generar documentación para el elemento en la posición del cursor"
   })
 
+  -- Comando para configurar nivel de log
+  vim.api.nvim_create_user_command("CopilotLog", function(opts)
+    local log_level = string.upper(opts.args)
+    local log_module = require("copilotchatassist.utils.log")
+
+    -- Establecer nivel de log
+    if log_level == "DEBUG" then
+      options.set({ log_level = vim.log.levels.DEBUG })
+      vim.g.copilotchatassist_debug = true
+      log.info("Nivel de log establecido a DEBUG")
+    elseif log_level == "TRACE" then
+      options.set({ log_level = vim.log.levels.TRACE })
+      vim.g.copilotchatassist_debug = true
+      log.info("Nivel de log establecido a TRACE")
+    elseif log_level == "INFO" then
+      options.set({ log_level = vim.log.levels.INFO })
+      vim.g.copilotchatassist_debug = false
+      log.info("Nivel de log establecido a INFO")
+    elseif log_level == "WARN" or log_level == "WARNING" then
+      options.set({ log_level = vim.log.levels.WARN })
+      vim.g.copilotchatassist_debug = false
+      log.info("Nivel de log establecido a WARN")
+    elseif log_level == "ERROR" then
+      options.set({ log_level = vim.log.levels.ERROR })
+      vim.g.copilotchatassist_debug = false
+      log.info("Nivel de log establecido a ERROR")
+    elseif log_level == "STATUS" or log_level == "SHOW" or log_level == "" then
+      log_module.show_config()
+    else
+      log.info("Uso: CopilotLog [DEBUG|TRACE|INFO|WARN|ERROR|STATUS]")
+    end
+  end, {
+    desc = "Establecer nivel de log o mostrar estado",
+    nargs = "?",
+    complete = function()
+      return {"DEBUG", "TRACE", "INFO", "WARN", "ERROR", "STATUS"}
+    end
+  })
+
   -- El comando especial para documentar records de Java ahora está obsoleto
   -- ya que la funcionalidad ha sido integrada en los comandos principales
   -- Lo mantenemos por compatibilidad con versiones anteriores
@@ -177,8 +255,20 @@ function M.setup(opts)
     patches.setup()
   end)
 
-  -- Activar modo de depuración para los mensajes de log
-  vim.g.copilotchatassist_debug = true
+  -- Inicializar sistema de progreso visual
+  pcall(function()
+    local progress = require("copilotchatassist.utils.progress")
+    progress.setup()
+  end)
+
+  -- Respetar la configuración de log_level en lugar de forzar modo debug
+  -- Solo establecer modo debug si el nivel es DEBUG o superior
+  if opts.log_level == nil or opts.log_level >= vim.log.levels.DEBUG then
+    vim.g.copilotchatassist_debug = true
+  else
+    vim.g.copilotchatassist_debug = false
+  end
+  vim.g.copilotchatassist_silent = true
 
   -- Inicializar el módulo de documentación - lo hacemos de manera totalmente perezosa
   vim.defer_fn(function()
@@ -188,8 +278,9 @@ function M.setup(opts)
     end)
   end, 100)
 
-  -- Important initialization notification - show as a notification with timeout
-  vim.notify("CopilotChatAssist initialized", vim.log.levels.INFO, { timeout = 2000 })
+  -- Log initialization but don't show notification
+  local log = require("copilotchatassist.utils.log")
+  log.info("CopilotChatAssist initialized")
 end
 
 -- Exponer la función get_copilotchat_config para que CopilotChat pueda utilizarla
