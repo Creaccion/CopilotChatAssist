@@ -262,7 +262,7 @@ local function reload_todo_split(buf)
       -- Highlight the title according to priority
       local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
       local title_end = #line
-      local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
+      local hl_group = options.todo_highlights[priority] or ""
       if hl_group ~= "" then
         table.insert(highlights, {
           line = i - 1,
@@ -417,7 +417,6 @@ end
 
 function M.show_task_details(task)
   -- Asegurarnos de obtener el idioma directamente de la configuración
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local labels = {}
 
@@ -698,7 +697,6 @@ function M.filter_tasks_by_status(status, buf)
   end
 
   -- Obtener idioma directamente de opciones
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local title = lang:lower() == "spanish"
     and ("Filtrado por estado: " .. status)
@@ -724,7 +722,6 @@ function M.filter_tasks_by_priority(priority, buf)
   end
 
   -- Obtener idioma directamente de opciones
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local title = lang:lower() == "spanish"
     and ("Filtrado por prioridad: " .. priority)
@@ -776,7 +773,7 @@ function M.display_filtered_tasks(tasks, buf, title)
       -- Highlight the title according to priority
       local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
       local title_end = #line
-      local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
+      local hl_group = options.todo_highlights[priority] or ""
       if hl_group ~= "" then
         table.insert(highlights, {
           line = i + 1, -- +2 for title lines
@@ -1046,7 +1043,7 @@ function M.open_todo_split()
         reload_todo_split(bufnr)
       end)
     end,
-    desc = options.get().language:lower() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
+    desc = i18n.get_current_language() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
   })
 
   -- Añadir mapeo para filtrar por estado
