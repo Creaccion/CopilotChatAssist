@@ -1,30 +1,14 @@
--- Wrapper for CopilotChat API integration
+-- Simplified wrapper for CopilotChat API integration
+-- This version delegates more functionality to CopilotChat and eliminates duplicated code
 
 local options = require("copilotchatassist.options")
-local utils = require("copilotchatassist.utils")
-local string_utils = require("copilotchatassist.utils.string")
 local log = require("copilotchatassist.utils.log")
+local string_utils = require("copilotchatassist.utils.string")
 
 local M = {}
 
--- Historial de solicitudes para referencia
-M.history = {
-  requests = {},
-  responses = {},
-  max_history = 50
-}
-
--- Agregar entrada al historial
-local function add_to_history(request, response)
-  if #M.history.requests >= M.history.max_history then
-    table.remove(M.history.requests, 1)
-    table.remove(M.history.responses, 1)
-  end
-
-  table.insert(M.history.requests, request)
-  table.insert(M.history.responses, response)
-
-  -- Procesar respuesta en busca de patches
+-- Process copilot response for patches
+local function process_response(response)
   if response and type(response) == "string" then
     local patches_module = require("copilotchatassist.patches")
     local patch_count = patches_module.process_copilot_response(response)
@@ -35,12 +19,34 @@ local function add_to_history(request, response)
           english = string.format("Found %d patches in the response. Use :CopilotPatchesWindow to view them.", patch_count),
           spanish = string.format("Se encontraron %d patches en la respuesta. Usa :CopilotPatchesWindow para verlos.", patch_count)
         })
-      end, 500) -- Pequeño retraso para que la notificación sea visible después de la respuesta
+      end, 500)
     end
+
+    return patch_count
+  end
+
+  return 0
+end
+
+-- Save debug information
+local function save_debug_info(message, type, content)
+  local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+  vim.fn.mkdir(debug_dir, "p")
+
+  local filename = type and debug_dir .. "/" .. type .. ".txt" or debug_dir .. "/last_prompt.txt"
+  local file = io.open(filename, "w")
+
+  if file then
+    file:write(content or message)
+    file:close()
+    log.debug({
+      english = "Debug info saved to " .. filename,
+      spanish = "Información de depuración guardada en " .. filename
+    })
   end
 end
 
--- Función principal para enviar peticiones a CopilotChat
+-- Main function for sending requests to CopilotChat
 function M.ask(message, opts)
   opts = opts or {}
 
@@ -51,7 +57,7 @@ function M.ask(message, opts)
 
   if not opts.system_prompt then
     opts.system_prompt = options.get().system_prompt or
-        require("copilotchatassist.prompts.system").default
+      require("copilotchatassist.prompts.system").default
   end
 
   -- Configurar un timeout para evitar bloqueos indefinidos
@@ -81,7 +87,7 @@ function M.ask(message, opts)
   -- No forzar modo debug para respetar log_level
   vim.g.copilotchatassist_silent = true
 
-  -- Registrar la solicitud (protegido contra errores)
+  -- Log the request (protected against errors)
   pcall(function()
     -- No mostrar mensajes de debug sobre envío de solicitud a CopilotChat
   end)
@@ -97,7 +103,7 @@ function M.ask(message, opts)
     -- No mostrar mensaje de debug sobre guardar prompt
   end
 
-  -- Si se proporciona una función de callback, envolvemos la original para almacenar el historial
+  -- Wrap the original callback to process patches
   local original_callback = opts.callback
   if opts.callback and type(opts.callback) == "function" then
     opts.callback = function(response)
@@ -140,13 +146,14 @@ function M.ask(message, opts)
         log.error("Ignorando callback con respuesta nil para evitar ciclos")
       end
     end
-  else
-    -- Si no hay callback, creamos uno para procesar patches
-    opts.callback = function(response)
-      add_to_history(message, response)
+
+    -- Call the original callback if provided
+    if original_callback then
+      original_callback(response)
     end
   end
 
+  -- Try to use CopilotChat API
   local ok, CopilotChat = pcall(require, "CopilotChat")
 
   if ok and CopilotChat then
@@ -186,7 +193,7 @@ function M.ask(message, opts)
   end
 end
 
--- Abrir CopilotChat con contexto específico
+-- Open CopilotChat with specific context
 function M.open(context, opts)
   opts = opts or {}
   if not opts.system_prompt then
@@ -207,6 +214,7 @@ function M.open(context, opts)
     local success = pcall(function()
       CopilotChat.open({ context = context }, opts)
     end)
+
     if not success then
       -- Solo registrar en log
       vim.cmd("CopilotChat " .. vim.fn.shellescape(context))
@@ -216,7 +224,7 @@ function M.open(context, opts)
   end
 end
 
--- Solicitar asistencia con TODOs
+-- Request TODO assistance
 function M.ask_todo_assistance(todo_content, callback)
   local prompt = [[
 Por favor, ayúdame a organizar mejor estas tareas TODO:
@@ -237,15 +245,11 @@ Responde con la tabla markdown mejorada.
 
   M.ask(prompt, {
     headless = true,
-    callback = function(response)
-      if callback then
-        callback(response)
-      end
-    end
+    callback = callback
   })
 end
 
--- Obtener sugerencias para próximas tareas basadas en las actuales
+-- Get suggestions for next tasks based on current ones
 function M.suggest_next_tasks(current_tasks, callback)
   local tasks_str = ""
   for _, task in ipairs(current_tasks) do
@@ -268,15 +272,11 @@ Formatea tu respuesta como una tabla markdown con columnas: Título | Prioridad 
 
   M.ask(prompt, {
     headless = true,
-    callback = function(response)
-      if callback then
-        callback(response)
-      end
-    end
+    callback = callback
   })
 end
 
--- Solicitar a CopilotChat una explicación sobre una tarea específica
+-- Request explanation for a specific task
 function M.explain_task(task, callback)
   local prompt = [[
 Necesito comprender mejor la siguiente tarea:
@@ -294,32 +294,12 @@ Por favor, ayúdame con:
 ]]
 
   M.ask(prompt, {
-    headless = false,  -- Mostrar la respuesta en la UI
-    callback = function(response)
-      if callback then
-        callback(response)
-      end
-    end
+    headless = false,
+    callback = callback
   })
 end
 
--- Obtener historial de solicitudes recientes
-function M.get_history(limit)
-  limit = limit or M.history.max_history
-  local result = {}
-
-  local count = math.min(limit, #M.history.requests)
-  for i = #M.history.requests - count + 1, #M.history.requests do
-    table.insert(result, {
-      request = M.history.requests[i],
-      response = M.history.responses[i]
-    })
-  end
-
-  return result
-end
-
--- Procesar contenido para extraer patches
+-- Process content to extract patches
 function M.process_for_patches(content)
   if not content or type(content) ~= "string" then
     -- No mostrar mensaje de debug sobre contenido inválido
@@ -330,7 +310,7 @@ function M.process_for_patches(content)
   return patches_module.process_copilot_response(content)
 end
 
--- Solicitar la implementación de una tarea específica
+-- Request implementation for a specific task
 function M.implement_task(task, callback)
   local prompt = [[
 Por favor, implementa la siguiente tarea usando código claro y bien estructurado:
@@ -357,7 +337,7 @@ Si necesitas crear un archivo nuevo, usa path a la ruta completa donde debe crea
   M.ask(prompt, {
     headless = false,
     callback = function(response)
-      -- Procesar automáticamente para patches
+      -- Process automatically for patches
       local patches_count = M.process_for_patches(response)
 
       if callback then
@@ -365,6 +345,22 @@ Si necesitas crear un archivo nuevo, usa path a la ruta completa donde debe crea
       end
     end
   })
+end
+
+-- Safe wrapper for CopilotChat.ask
+function M.safe_ask(message, opts)
+  opts = opts or {}
+
+  local ok, result = pcall(function()
+    M.ask(message, opts)
+  end)
+
+  if not ok then
+    log.error("Failed to call CopilotChat: " .. tostring(result))
+    return nil
+  end
+
+  return result
 end
 
 return M

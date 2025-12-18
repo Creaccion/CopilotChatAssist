@@ -1,7 +1,9 @@
+-- Módulo consolidado para manejar la visualización y gestión de TODOs
+-- Integra las funcionalidades de todos/init.lua y todos/window.lua
+
 local M = {}
 
 -- Módulo para manejar la visualización y gestión de TODOs
-
 local uv = vim.loop
 local file_utils = require("copilotchatassist.utils.file")
 local context = require("copilotchatassist.context")
@@ -10,6 +12,7 @@ local utils = require("copilotchatassist.utils")
 local log = require("copilotchatassist.utils.log")
 local copilot_api = require("copilotchatassist.copilotchat_api")
 local i18n = require("copilotchatassist.i18n")
+local api = vim.api
 
 -- Almacena el estado de la visualización de TODOs
 M.state = {
@@ -18,6 +21,7 @@ M.state = {
   todo_tasks = {},   -- Tareas actuales
   selected_task = nil, -- Tarea actualmente seleccionada
   selected_task_index = nil, -- Índice de la tarea seleccionada
+  floating_windows = {},  -- Ventanas flotantes activas
 }
 
 -- Obtener rutas actualizadas desde el contexto
@@ -27,8 +31,6 @@ local function get_paths()
   end
   return M.state.paths
 end
-
-local api = vim.api
 
 -- Estandarización de iconos de estado
 local status_icons = {
@@ -166,9 +168,255 @@ local function extract_todo_title(lines)
   return "TODO"
 end
 
-local function show_task_details(task)
+-- Helper: extract icon from status (first emoji or symbol)
+local function extract_icon(status)
+  -- Try to extract emoji/icon from status string
+  local icon = status:match("[%z\1-\127\194-\244][\128-\191]*")
+  if icon and (icon == "✅" or icon == "⬜" or icon == "🔄") then
+    return icon
+  end
+  -- If no emoji, map text to icon
+  return status_icons[status] or status
+end
+
+-- Actualizar la visualización de TODOs en el buffer
+local function reload_todo_split(buf)
+  log.debug({
+    english = "reload_todo_split called",
+    spanish = "reload_todo_split llamado"
+  })
+
+  -- Si se proporciona el estado de la ventana split, usar su buffer
+  if M.state.todo_split and not buf then
+    if not vim.api.nvim_win_is_valid(M.state.todo_split.win) then
+      log.debug({
+        english = "todo_split window is invalid",
+        spanish = "Ventana todo_split inválida"
+      })
+      return
+    end
+    buf = M.state.todo_split.buf
+  else
+    -- Usar el buffer actual si no se proporciona uno
+    buf = buf or vim.api.nvim_get_current_buf()
+  end
+
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    log.debug({
+      english = "Buffer is nil or invalid",
+      spanish = "Buffer es nulo o inválido"
+    })
+    return
+  end
+
+  local paths = get_paths()
+  local todo_path = paths.todo_path
+  local tasks = parse_todo_markdown(todo_path)
+
+  -- Actualizar las tareas en el estado
+  M.state.todo_tasks = tasks
+
+  local lines = {}
+  local highlights = {}
+
+  -- Priority icons (①-⑤)
+  local priority_icons = { "①", "②", "③", "④", "⑤" }
+
+  -- Status icons para visualización
+  local display_status_icons = {
+    done = "[✔]",
+    pending = "[ ]",
+    ["in progress"] = "[~]",
+    ["in_progress"] = "[~]",
+    progress = "[~]",
+  }
+
+  if not tasks or #tasks == 0 then
+    log.debug({
+      english = "No tasks found",
+      spanish = "No se encontraron tareas"
+    })
+    -- Usar i18n para obtener el mensaje en el idioma configurado
+    local message = i18n.t("todo.no_tasks_available", {})
+    if not message or message == "todo.no_tasks_available" then
+      -- Si no se encuentra la traducción, usar fallback directo
+      message = i18n.get_current_language() == "spanish" and "No hay tareas disponibles. Usa 'r' para actualizar." or "No tasks available. Use 'r' to refresh."
+    end
+    table.insert(lines, message)
+  else
+    for i, task in ipairs(tasks) do
+      local priority = tonumber(task.priority) or 3
+      if priority < 1 or priority > 5 then
+        priority = 3
+      end
+      local priority_icon = priority_icons[priority]
+
+      -- Determine status icon
+      local status = (task.status or "pending"):lower()
+      local status_icon = display_status_icons[status] or "[ ]"
+
+      -- Compose line: <priority_icon> <status_icon> <title>
+      local line = string.format("%s %s %s", priority_icon, status_icon, task.title or "")
+      table.insert(lines, line)
+
+      -- Highlight the title according to priority
+      local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
+      local title_end = #line
+      local hl_group = options.todo_highlights[priority] or ""
+      if hl_group ~= "" then
+        table.insert(highlights, {
+          line = i - 1,
+          col_start = title_start,
+          col_end = title_end,
+          group = hl_group,
+        })
+      end
+    end
+  end
+
+  vim.api.nvim_buf_set_option(buf, "modifiable", true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+
+  -- Clear existing highlights
+  vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
+
+  -- Apply highlights
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(
+      buf,
+      -1,
+      hl.group,
+      hl.line,
+      hl.col_start,
+      hl.col_end
+    )
+  end
+
+  log.debug({
+    english = string.format("Rendered %d tasks, %d highlights", #lines, #highlights),
+    spanish = string.format("Se renderizaron %d tareas, %d resaltados", #lines, #highlights)
+  })
+end
+
+-- Crear una ventana flotante para visualización de TODOs
+function M.create_floating_window(opts)
+  opts = opts or {}
+  local width = opts.width or math.floor(vim.o.columns * 0.8)
+  local height = opts.height or math.floor(vim.o.lines * 0.8)
+  local row = opts.row or math.floor((vim.o.lines - height) / 2)
+  local col = opts.col or math.floor((vim.o.columns - width) / 2)
+  local title = opts.title or "TODOs"
+  local content = opts.content or {}
+  local filetype = opts.filetype or "markdown"
+
+  local buf = api.nvim_create_buf(false, true)
+
+  -- Configurar buffer
+  api.nvim_buf_set_option(buf, "buftype", "nofile")
+  api.nvim_buf_set_option(buf, "bufhidden", "wipe")
+  api.nvim_buf_set_option(buf, "swapfile", false)
+  api.nvim_buf_set_option(buf, "filetype", filetype)
+
+  -- Establecer contenido
+  api.nvim_buf_set_lines(buf, 0, -1, false, content)
+
+  -- Crear ventana
+  local win_opts = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = title,
+    title_pos = "center",
+  }
+
+  local win = api.nvim_open_win(buf, true, win_opts)
+
+  -- Guardar referencia
+  local win_id = #M.state.floating_windows + 1
+  M.state.floating_windows[win_id] = {
+    win = win,
+    buf = buf,
+    opts = opts
+  }
+
+  -- Configurar keymaps
+  if opts.keymaps then
+    for key, action in pairs(opts.keymaps) do
+      if type(action) == "function" then
+        api.nvim_buf_set_keymap(buf, "n", key, "", {
+          noremap = true,
+          silent = true,
+          callback = function()
+            action(buf, win, win_id)
+          end,
+        })
+      elseif type(action) == "string" then
+        api.nvim_buf_set_keymap(buf, "n", key, action, {
+          noremap = true,
+          silent = true
+        })
+      end
+    end
+  end
+
+  -- Añadir siempre mapeo para cerrar
+  api.nvim_buf_set_keymap(buf, "n", "q", "", {
+    noremap = true,
+    silent = true,
+    callback = function()
+      M.close_floating_window(win_id)
+    end
+  })
+
+  -- Añadir autocomando para limpiar la referencia al cerrar la ventana
+  api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(win),
+    callback = function()
+      M.state.floating_windows[win_id] = nil
+    end,
+    once = true
+  })
+
+  return win_id
+end
+
+-- Actualizar contenido de ventana flotante
+function M.update_window_content(win_id, content)
+  local window = M.state.floating_windows[win_id]
+  if not window or not api.nvim_win_is_valid(window.win) then
+    return false
+  end
+
+  local buf = window.buf
+
+  -- Actualizar contenido
+  api.nvim_buf_set_option(buf, "modifiable", true)
+  api.nvim_buf_set_lines(buf, 0, -1, false, content)
+  api.nvim_buf_set_option(buf, "modifiable", false)
+
+  return true
+end
+
+-- Cerrar ventana flotante
+function M.close_floating_window(win_id)
+  local window = M.state.floating_windows[win_id]
+  if not window or not api.nvim_win_is_valid(window.win) then
+    return false
+  end
+
+  api.nvim_win_close(window.win, true)
+  M.state.floating_windows[win_id] = nil
+
+  return true
+end
+
+function M.show_task_details(task)
   -- Asegurarnos de obtener el idioma directamente de la configuración
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local labels = {}
 
@@ -383,7 +631,7 @@ local function show_task_details(task)
 
             -- Show updated details
             vim.defer_fn(function()
-              show_task_details(task)
+              M.show_task_details(task)
             end, 100)
           end
         end
@@ -421,7 +669,7 @@ local function show_task_details(task)
             vim.defer_fn(function()
               -- Get the updated task from the refreshed state
               local updated_task = M.state.todo_tasks[task_index] or task
-              show_task_details(updated_task)
+              M.show_task_details(updated_task)
             end, 100)
           end
         end
@@ -431,137 +679,6 @@ local function show_task_details(task)
   })
 
   return popup_buf, popup_win
-end
-
--- Helper: extract icon from status (first emoji or symbol)
-local function extract_icon(status)
-  -- Try to extract emoji/icon from status string
-  local icon = status:match("[%z\1-\127\194-\244][\128-\191]*")
-  if icon and (icon == "✅" or icon == "⬜" or icon == "🔄") then
-    return icon
-  end
-  -- If no emoji, map text to icon
-  return status_icons[status] or status
-end
-
--- Actualizar la visualización de TODOs en el buffer
-local function reload_todo_split(buf)
-  log.debug({
-    english = "reload_todo_split called",
-    spanish = "reload_todo_split llamado"
-  })
-
-  -- Si se proporciona el estado de la ventana split, usar su buffer
-  if M.state.todo_split and not buf then
-    if not vim.api.nvim_win_is_valid(M.state.todo_split.win) then
-      log.debug({
-        english = "todo_split window is invalid",
-        spanish = "Ventana todo_split inválida"
-      })
-      return
-    end
-    buf = M.state.todo_split.buf
-  else
-    -- Usar el buffer actual si no se proporciona uno
-    buf = buf or vim.api.nvim_get_current_buf()
-  end
-
-  if not buf or not vim.api.nvim_buf_is_valid(buf) then
-    log.debug({
-      english = "Buffer is nil or invalid",
-      spanish = "Buffer es nulo o inválido"
-    })
-    return
-  end
-
-  local paths = get_paths()
-  local todo_path = paths.todo_path
-  local tasks = parse_todo_markdown(todo_path)
-
-  -- Actualizar las tareas en el estado
-  M.state.todo_tasks = tasks
-
-  local lines = {}
-  local highlights = {}
-
-  -- Priority icons (①-⑤)
-  local priority_icons = { "①", "②", "③", "④", "⑤" }
-
-  -- Status icons para visualización
-  local display_status_icons = {
-    done = "[✔]",
-    pending = "[ ]",
-    ["in progress"] = "[~]",
-    ["in_progress"] = "[~]",
-    progress = "[~]",
-  }
-
-  if not tasks or #tasks == 0 then
-    log.debug({
-      english = "No tasks found",
-      spanish = "No se encontraron tareas"
-    })
-    -- Usar i18n para obtener el mensaje en el idioma configurado
-    local message = i18n.t("todo.no_tasks_available", {})
-    if not message or message == "todo.no_tasks_available" then
-      -- Si no se encuentra la traducción, usar fallback directo
-      message = i18n.get_current_language() == "spanish" and "No hay tareas disponibles. Usa 'r' para actualizar." or "No tasks available. Use 'r' to refresh."
-    end
-    table.insert(lines, message)
-  else
-    for i, task in ipairs(tasks) do
-      local priority = tonumber(task.priority) or 3
-      if priority < 1 or priority > 5 then
-        priority = 3
-      end
-      local priority_icon = priority_icons[priority]
-
-      -- Determine status icon
-      local status = (task.status or "pending"):lower()
-      local status_icon = display_status_icons[status] or "[ ]"
-
-      -- Compose line: <priority_icon> <status_icon> <title>
-      local line = string.format("%s %s %s", priority_icon, status_icon, task.title or "")
-      table.insert(lines, line)
-
-      -- Highlight the title according to priority
-      local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
-      local title_end = #line
-      local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
-      if hl_group ~= "" then
-        table.insert(highlights, {
-          line = i - 1,
-          col_start = title_start,
-          col_end = title_end,
-          group = hl_group,
-        })
-      end
-    end
-  end
-
-  vim.api.nvim_buf_set_option(buf, "modifiable", true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
-
-  -- Clear existing highlights
-  vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
-
-  -- Apply highlights
-  for _, hl in ipairs(highlights) do
-    vim.api.nvim_buf_add_highlight(
-      buf,
-      -1,
-      hl.group,
-      hl.line,
-      hl.col_start,
-      hl.col_end
-    )
-  end
-
-  log.debug({
-    english = string.format("Rendered %d tasks, %d highlights", #lines, #highlights),
-    spanish = string.format("Se renderizaron %d tareas, %d resaltados", #lines, #highlights)
-  })
 end
 
 -- Filtrar tareas por estado
@@ -580,7 +697,6 @@ function M.filter_tasks_by_status(status, buf)
   end
 
   -- Obtener idioma directamente de opciones
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local title = lang:lower() == "spanish"
     and ("Filtrado por estado: " .. status)
@@ -606,7 +722,6 @@ function M.filter_tasks_by_priority(priority, buf)
   end
 
   -- Obtener idioma directamente de opciones
-  local options = require("copilotchatassist.options")
   local lang = options.get().language or "english"
   local title = lang:lower() == "spanish"
     and ("Filtrado por prioridad: " .. priority)
@@ -658,7 +773,7 @@ function M.display_filtered_tasks(tasks, buf, title)
       -- Highlight the title according to priority
       local title_start = #priority_icon + 1 + #status_icon + 1 -- spaces included
       local title_end = #line
-      local hl_group = require("copilotchatassist.options").todo_highlights[priority] or ""
+      local hl_group = options.todo_highlights[priority] or ""
       if hl_group ~= "" then
         table.insert(highlights, {
           line = i + 1, -- +2 for title lines
@@ -910,7 +1025,7 @@ function M.open_todo_split()
         local task = M.state.todo_tasks[lnum]
         M.state.selected_task = task
         M.state.selected_task_index = lnum
-        show_task_details(task)
+        M.show_task_details(task)
       end
     end,
     desc = "Show task details",
@@ -928,7 +1043,7 @@ function M.open_todo_split()
         reload_todo_split(bufnr)
       end)
     end,
-    desc = options.get().language:lower() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
+    desc = i18n.get_current_language() == "spanish" and "Actualizar lista de TODOs" or "Refresh TODO list",
   })
 
   -- Añadir mapeo para filtrar por estado
@@ -1086,8 +1201,115 @@ function M.show_selected_task_details()
   local orig_tasks = parse_todo_markdown(todo_path)
   local task = orig_tasks[idx]
   if task then
-    show_task_details(task)
+    M.show_task_details(task)
   end
+end
+
+-- Mostrar una ventana de ayuda para el módulo de TODOs
+function M.show_help_window()
+  local content = {
+    "# Ayuda para el módulo de TODOs",
+    "",
+    "## Atajos de teclado",
+    "",
+    "- `<CR>` : Ver detalles de la tarea",
+    "- `r`    : Actualizar lista de tareas desde el contexto",
+    "- `f`    : Filtrar tareas por estado",
+    "- `p`    : Filtrar tareas por prioridad",
+    "- `s`    : Cambiar estado de la tarea seleccionada",
+    "- `?`    : Mostrar esta ayuda",
+    "- `q`    : Cerrar ventana",
+    "",
+    "## Estados disponibles",
+    "",
+    "- `pending`     : Tarea pendiente",
+    "- `in_progress` : Tarea en progreso",
+    "- `done`        : Tarea completada",
+    "",
+    "## Prioridades",
+    "",
+    "- `1`: Crítica",
+    "- `2`: Alta",
+    "- `3`: Media (default)",
+    "- `4`: Baja",
+    "- `5`: Opcional",
+  }
+
+  return M.create_floating_window({
+    title = "Ayuda de TODOs",
+    content = content,
+    width = 60,
+    height = #content + 2,
+    filetype = "markdown"
+  })
+end
+
+-- Mostrar estadísticas de tareas
+function M.show_todo_stats(tasks)
+  local total = #tasks
+  local pending = 0
+  local in_progress = 0
+  local done = 0
+
+  for _, task in ipairs(tasks) do
+    local status = (task.status or ""):lower()
+    if status:find("done") then
+      done = done + 1
+    elseif status:find("progress") then
+      in_progress = in_progress + 1
+    else
+      pending = pending + 1
+    end
+  end
+
+  local progress = total > 0 and math.floor((done / total) * 100) or 0
+
+  local content = {
+    "# Estadísticas de TODOs",
+    "",
+    "- **Total tareas**: " .. total,
+    "- **Pendientes**: " .. pending,
+    "- **En progreso**: " .. in_progress,
+    "- **Completadas**: " .. done,
+    "- **Progreso**: " .. progress .. "%",
+    "",
+    string.rep("█", math.floor(progress / 5)) .. string.rep("░", 20 - math.floor(progress / 5)),
+  }
+
+  return M.create_floating_window({
+    title = "Estadísticas",
+    content = content,
+    width = 50,
+    height = #content + 2,
+    filetype = "markdown"
+  })
+end
+
+-- Permitir elegir una tarea y ejecutar acción sobre ella
+function M.select_task(tasks, title, action_callback)
+  if not tasks or #tasks == 0 then
+    vim.notify("No hay tareas disponibles", vim.log.levels.WARN)
+    return
+  end
+
+  -- Crear opciones para selector
+  local options = {}
+  for i, task in ipairs(tasks) do
+    local priority = task.priority or "3"
+    local status = task.status or "pending"
+    table.insert(options, string.format("[%s][%s] %s", priority, status, task.title or ""))
+  end
+
+  vim.ui.select(options, {
+    prompt = title,
+    format_item = function(item)
+      return item
+    end
+  }, function(choice, idx)
+    if choice and idx and action_callback then
+      action_callback(tasks[idx], idx)
+    end
+  end)
 end
 
 -- Main: Generate TODO file from context

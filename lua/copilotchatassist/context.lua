@@ -3,6 +3,7 @@ local file_utils = require("copilotchatassist.utils.file")
 local log = require("copilotchatassist.utils.log")
 local options = require("copilotchatassist.options")
 local copilot_api = require("copilotchatassist.copilotchat_api")
+local context_prompts = require("copilotchatassist.prompts.context")
 
 local M = {}
 
@@ -269,8 +270,6 @@ function M.copilot_tickets()
   end)
 end
 
-
-
 -- Analyze and store global project context
 function M.analyze_project_context(requirement)
   -- Iniciar spinner de progreso
@@ -345,6 +344,24 @@ function M.analyze_ticket_context(requirement)
   })
 end
 
+-- Update context wrapper function for init.lua command
+function M.update_context()
+  local requirement = M.load_requirement() or ""
+  local ticket_synthesis = M.load_synthesis() or ""
+  local project_synthesis = M.load_project_context() or ""
+
+  -- Ask if ticket context should be updated
+  M.ask_should_update_context(requirement, ticket_synthesis, "ticket")
+  -- Ask if project context should be updated
+  M.ask_should_update_context(requirement, project_synthesis, "project")
+end
+
+-- Get project context function for init.lua command
+function M.get_project_context()
+  local requirement = M.load_requirement() or ""
+  M.analyze_project_context(requirement)
+end
+
 -- User commands for manual invocation
 vim.api.nvim_create_user_command(
   "CopilotProjectContext",
@@ -380,10 +397,11 @@ vim.api.nvim_create_user_command(
 )
 
 function M.ask_should_update_context(requirement, synthesis, type)
-  local prompt_template = require("copilotchatassist.prompts.context_update").default
-  local prompt = prompt_template
-      :gsub("<requirement>", requirement or "")
-      :gsub("<context>", synthesis or "")
+  local replacements = {
+    requirement = requirement or "",
+    context = synthesis or ""
+  }
+  local prompt = context_prompts.build(context_prompts.update, replacements)
   copilot_api.ask(prompt, {
     headless = true,
     callback = function(response)
