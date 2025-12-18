@@ -100,6 +100,85 @@ Responde exclusivamente en español a menos que el usuario pida explícitamente 
   })
 end
 
+-- Función para continuar con el flujo normal de contextos después del enriquecimiento
+function M.continue_with_enriched_context(requirement, paths)
+  local ticket_synthesis = file_utils.read_file(paths.synthesis) or ""
+  local project_synthesis = file_utils.read_file(paths.project_context) or ""
+
+  M.continue_with_normal_context(requirement, ticket_synthesis, project_synthesis, paths)
+end
+
+-- Función para continuar con el flujo normal de contextos
+function M.continue_with_normal_context(requirement, ticket_synthesis, project_synthesis, paths)
+  -- Si no hay síntesis de ticket, generarla
+  if not (ticket_synthesis and #ticket_synthesis > 10) then
+    vim.notify("Generating ticket synthesis...", vim.log.levels.INFO)
+    M.analyze_ticket_context(requirement)
+    ticket_synthesis = file_utils.read_file(paths.synthesis)
+  end
+
+  -- Si falta síntesis de proyecto, generarla y espera a que esté lista antes de continuar
+  if not (project_synthesis and #project_synthesis > 10) then
+    vim.notify("Generating project synthesis...", vim.log.levels.INFO)
+    M.analyze_project_context(requirement)
+    vim.defer_fn(function()
+      local updated_project_synthesis = file_utils.read_file(paths.project_context)
+      if updated_project_synthesis and #updated_project_synthesis > 10 then
+        M.copilot_tickets()
+      else
+        vim.notify("Project synthesis not ready yet. Please try again in a moment.", vim.log.levels.WARN)
+      end
+    end, 1500)
+    return
+  end
+
+  -- Actualizar contextos existentes antes de combinar
+  M.update_context_with_progress(requirement, paths.synthesis, function()
+    M.update_context_with_progress(requirement, paths.project_context, function()
+      local combine_contexts = function()
+        local updated_ticket_synthesis = file_utils.read_file(paths.synthesis)
+        local updated_project_synthesis = file_utils.read_file(paths.project_context)
+        local context_parts = {}
+        if requirement and #requirement > 10 then
+          table.insert(context_parts, "-- Requirement Context --\n" .. requirement)
+        end
+        if updated_ticket_synthesis and #updated_ticket_synthesis > 10 then
+          table.insert(context_parts, "-- Ticket Synthesis --\n" .. updated_ticket_synthesis)
+        end
+        if updated_project_synthesis and #updated_project_synthesis > 10 then
+          table.insert(context_parts, "-- Project Synthesis --\n" .. updated_project_synthesis)
+        end
+
+        if #context_parts > 0 then
+          local full_context = table.concat(context_parts, "\n\n")
+          local i18n = require("copilotchatassist.i18n")
+          local notify = require("copilotchatassist.utils.notify")
+
+          -- Usar el manejador de contexto para guardar y aplicar el contexto
+          local context_handler = require("copilotchatassist.utils.context_handler")
+          context_handler.store_context(full_context)
+
+          -- Intentar aplicar inmediatamente si CopilotChat está disponible
+          if context_handler.apply_context_to_chat() then
+            notify.info(i18n.t("context.context_loaded_combined"))
+          else
+            -- Fallback al método anterior si CopilotChat no está disponible
+            notify.info(i18n.t("context.context_loaded_combined"))
+            copilot_api.ask(full_context)
+          end
+          return
+        end
+
+        local i18n = require("copilotchatassist.i18n")
+        local notify = require("copilotchatassist.utils.notify")
+        notify.warn(i18n.t("context.no_context_files"), {force = true})
+      end
+
+      combine_contexts()
+    end)
+  end)
+end
+
 function M.copilot_tickets()
   local paths = M.get_context_paths()
   local requirement = file_utils.read_file(paths.requirement)
@@ -211,27 +290,39 @@ function M.copilot_tickets()
     return
   end
 
-  -- Si falta síntesis de ticket, generarla
-  if not (ticket_synthesis and #ticket_synthesis > 10) then
-    vim.notify("Generating ticket synthesis...", vim.log.levels.INFO)
-    M.analyze_ticket_context(requirement)
-    ticket_synthesis = file_utils.read_file(paths.synthesis)
-  end
+  -- Intenta enriquecer el contexto automáticamente con archivos relevantes
+  local notify = require("copilotchatassist.utils.notify")
+  local context_enricher = require("copilotchatassist.context_enricher")
 
-  -- Si falta síntesis de proyecto, generarla y espera a que esté lista antes de continuar
-  if not (project_synthesis and #project_synthesis > 10) then
-    vim.notify("Generating project synthesis...", vim.log.levels.INFO)
-    M.analyze_project_context(requirement)
-    vim.defer_fn(function()
-      local updated_project_synthesis = file_utils.read_file(paths.project_context)
-      if updated_project_synthesis and #updated_project_synthesis > 10 then
-        M.copilot_tickets()
+  notify.info("Analizando el proyecto para encontrar archivos relevantes...")
+
+  -- Enriquecer el contexto basado en el requerimiento
+  context_enricher.enrich_context(requirement, function(success, enriched_content)
+    if success and enriched_content then
+      -- Combinar el contexto enriquecido con la síntesis existente
+      local combined_synthesis = ""
+
+      if ticket_synthesis and #ticket_synthesis > 0 then
+        combined_synthesis = ticket_synthesis .. "\n\n-- Archivos Relevantes --\n" .. enriched_content
       else
-        vim.notify("Project synthesis not ready yet. Please try again in a moment.", vim.log.levels.WARN)
+        combined_synthesis = "-- Archivos Relevantes --\n" .. enriched_content
       end
-    end, 1500)
-    return
-  end
+
+      -- Guardar el contexto enriquecido
+      file_utils.write_file(paths.synthesis, combined_synthesis)
+      notify.info("Contexto enriquecido con archivos relevantes")
+
+      -- Actualizar la síntesis de ticket con el contenido enriquecido
+      ticket_synthesis = combined_synthesis
+
+      -- Continuar con el flujo normal
+      M.continue_with_normal_context(requirement, ticket_synthesis, project_synthesis, paths)
+    else
+      -- Si no se pudo enriquecer, continuar con el flujo normal
+      notify.warn("No se pudo enriquecer el contexto con archivos relevantes, continuando normalmente")
+      M.continue_with_normal_context(requirement, ticket_synthesis, project_synthesis, paths)
+    end
+  end)
 
   -- Actualizar contextos existentes antes de combinar
   local function combine_contexts()
@@ -252,8 +343,19 @@ function M.copilot_tickets()
       local full_context = table.concat(context_parts, "\n\n")
       local i18n = require("copilotchatassist.i18n")
       local notify = require("copilotchatassist.utils.notify")
-      notify.info(i18n.t("context.context_loaded_combined"))
-      copilot_api.ask(full_context)
+
+      -- Usar el manejador de contexto para guardar y aplicar el contexto
+      local context_handler = require("copilotchatassist.utils.context_handler")
+      context_handler.store_context(full_context)
+
+      -- Intentar aplicar inmediatamente si CopilotChat está disponible
+      if context_handler.apply_context_to_chat() then
+        notify.info(i18n.t("context.context_loaded_combined"))
+      else
+        -- Fallback al método anterior si CopilotChat no está disponible
+        notify.info(i18n.t("context.context_loaded_combined"))
+        copilot_api.ask(full_context)
+      end
       return
     end
 

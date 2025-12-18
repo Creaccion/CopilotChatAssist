@@ -50,10 +50,34 @@ end
 
 local function register_pr_commands()
   -- PR management commands
-  vim.api.nvim_create_user_command("CopilotEnhancePR", function()
-    require("copilotchatassist.pr_generator_i18n").enhance_pr()
+  vim.api.nvim_create_user_command("CopilotEnhancePR", function(opts)
+    local pr_module = require("copilotchatassist.pr_generator_i18n")
+
+    -- Obtener opciones del comando
+    local options = {}
+
+    -- Por defecto, actualizar título y mostrar vista previa
+    options.update_title = true
+
+    -- Si se especificó --no-preview, desactivar vista previa
+    if opts.fargs and vim.tbl_contains(opts.fargs, "--no-preview") then
+      options.use_preview = false
+    else
+      options.use_preview = true
+    end
+
+    -- Si se especificó --no-title-update, no actualizar título
+    if opts.fargs and vim.tbl_contains(opts.fargs, "--no-title-update") then
+      options.update_title = false
+    end
+
+    pr_module.enhance_pr(options)
   end, {
-    desc = "Enhance current PR description using CopilotChat with multi-language support"
+    desc = "Enhance current PR description with preview, updates title with Jira ticket",
+    nargs = "*",
+    complete = function()
+      return {"--no-preview", "--no-title-update"}
+    end
   })
 
   vim.api.nvim_create_user_command("CopilotChangePRLanguage", function(opts)
@@ -86,6 +110,172 @@ local function register_pr_commands()
     complete = function()
       return {"english", "spanish"}
     end
+  })
+
+  -- Comando para corregir diagramas Mermaid en la descripción de PR
+  vim.api.nvim_create_user_command("CopilotFixPRDiagrams", function()
+    require("copilotchatassist.pr_generator_i18n").fix_mermaid_diagrams()
+  end, {
+    desc = "Fix Mermaid diagrams in PR description with proper syntax"
+  })
+
+  -- Command for direct emergency PR update from saved response
+  -- Command to reset any stuck PR operations
+  vim.api.nvim_create_user_command("CopilotResetPROperations", function()
+    local pr_module = require("copilotchatassist.pr_generator_i18n")
+    pr_module.force_reset_pr_operations()
+  end, {
+    desc = "Reset the state of stuck PR operations"
+  })
+
+  -- Comando para actualización ultra-directa desde la respuesta en formato crudo
+  vim.api.nvim_create_user_command("CopilotSuperDirectPRUpdate", function(opts)
+    local log = require("copilotchatassist.utils.log")
+    local notify = require("copilotchatassist.utils.notify")
+    local pr_module = require("copilotchatassist.pr_generator_i18n")
+
+    log.info("Iniciando actualización ultra directa desde archivo de respuesta raw")
+    notify.info("Iniciando actualización ultra directa del PR...")
+
+    -- Leer el archivo de respuesta raw guardado
+    local cache_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+    local response_file = cache_dir .. "/enhance_pr_raw_table.txt"
+
+    local f = io.open(response_file, "r")
+    if not f then
+      log.error("No se encontró archivo de respuesta raw para actualización ultra directa")
+      notify.error("No se encontró archivo de respuesta raw guardado")
+      return false
+    end
+
+    local content = f:read("*a")
+    f:close()
+
+    log.debug("Archivo de respuesta raw leído correctamente, tamaño: " .. #content)
+
+    -- Construir una tabla desde el contenido leído
+    local success, response_table = pcall(function()
+      -- Extraer contenido de la tabla usando el formato más simple posible
+      local content_field = content:match('content = "(.-)",')
+      if not content_field then
+        log.error("No se pudo extraer content del archivo de respuesta raw")
+        return nil
+      end
+
+      -- Reemplazar secuencias de escape sin procesamiento complejo
+      local clean_content = content_field:gsub("\\n", "\n")
+
+      -- Crear una tabla simple con el contenido extraído
+      return { content = clean_content }
+    end)
+
+    if not success or not response_table then
+      log.error("Error al procesar el archivo de respuesta raw")
+      notify.error("Formato de archivo de respuesta raw no reconocido")
+      return false
+    end
+
+    -- Opciones
+    local use_preview = true
+    if opts.fargs and vim.tbl_contains(opts.fargs, "--no-preview") then
+      use_preview = false
+    end
+
+    -- Usar la función compartida ultra_direct_update con actualización de título y opción de vista previa
+    local update_success = pr_module.ultra_direct_update(response_table, true, use_preview)
+
+    if update_success then
+      notify.success("PR actualizado exitosamente con método ultra directo")
+      return true
+    else
+      notify.error("Error al actualizar PR con método ultra directo")
+      return false
+    end
+  end, {
+    desc = "Actualizar PR directamente desde archivo de respuesta raw con vista previa",
+    nargs = "*",
+    complete = function()
+      return {"--no-preview"}
+    end
+  })
+
+  vim.api.nvim_create_user_command("CopilotEmergencyPRUpdate", function()
+    -- Function to directly update PR using saved response file
+    local function emergency_direct_update()
+      local log = require("copilotchatassist.utils.log")
+      local notify = require("copilotchatassist.utils.notify")
+
+      log.info("Starting emergency direct update from saved response file")
+      notify.info("Starting direct emergency PR update...")
+
+      -- Reset any stuck state
+      local pr_module = require("copilotchatassist.pr_generator_i18n")
+      pr_module.pr_generation_in_progress = false
+      pr_module.pr_update_in_progress = false
+
+      -- Try to read directly from saved response file
+      local cache_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+      local response_file = cache_dir .. "/pr_immediate_response.txt"
+
+      local f = io.open(response_file, "r")
+      if not f then
+        log.error("Could not find response file for emergency update")
+        notify.error("No saved response file found")
+        return false
+      end
+
+      local content = f:read("*a")
+      f:close()
+
+      log.debug("Response file read successfully, size: " .. #content)
+
+      -- Extract content from table structure
+      local extracted_content = content:match('content = "(.-)",')
+      if not extracted_content then
+        log.error("Could not extract content from saved response")
+        notify.error("Unrecognized response file format")
+        return false
+      end
+
+      log.debug("Content extracted successfully, length: " .. #extracted_content)
+
+      -- Replace escape sequences
+      local clean_content = extracted_content:gsub("\\n", "\n")
+      log.debug("Escape sequences replaced, length: " .. #clean_content)
+
+      -- Save content to temporary file
+      local tmpfile = "/tmp/copilot_emergency_pr_update_" .. os.time() .. ".md"
+      local tmp_f = io.open(tmpfile, "w")
+      if not tmp_f then
+        log.error("Error creating temporary file: " .. tmpfile)
+        notify.error("Error creating temporary file")
+        return false
+      end
+
+      tmp_f:write(clean_content)
+      tmp_f:close()
+
+      log.debug("Content written to temporary file: " .. tmpfile)
+
+      -- Execute gh command to update PR
+      local cmd = string.format("gh pr edit --body-file '%s'", tmpfile)
+      log.debug("Executing command: " .. cmd)
+
+      local success = os.execute(cmd)
+      if success == 0 or success == true then
+        log.info("PR successfully updated with direct emergency method")
+        notify.success("PR successfully updated with emergency method")
+        return true
+      else
+        log.error("Error updating PR: " .. tostring(success))
+        notify.error("Error updating PR, code: " .. tostring(success))
+        return false
+      end
+    end
+
+    emergency_direct_update()
+  end, {
+    desc = "Update PR directly from saved response file (emergency)"
   })
 end
 
@@ -157,6 +347,7 @@ local function register_visualization_commands()
   })
 end
 
+local function register_code_review_commands()
   -- Comandos para Code Review
   vim.api.nvim_create_user_command("CopilotCodeReview", function()
     require("copilotchatassist.code_review").start_review()
@@ -195,7 +386,9 @@ end
   end, {
     desc = "Reiniciar/limpiar la revisión de código actual"
   })
+end
 
+local function register_patches_commands()
   -- Comandos para patches (migrados desde CopilotFiles)
   vim.api.nvim_create_user_command("CopilotPatchesWindow", function()
     require("copilotchatassist.patches").show_patch_window()
@@ -228,6 +421,7 @@ end
   })
 end
 
+local function register_log_commands()
   -- Comando para configurar nivel de log
   vim.api.nvim_create_user_command("CopilotLog", function(opts)
     local log_level = string.upper(opts.args)
@@ -287,6 +481,17 @@ function M.setup(opts)
   end
 
   -- Register commands immediately
+  local function create_commands()
+    register_context_commands()
+    register_todo_commands()
+    register_pr_commands()
+    register_documentation_commands()
+    register_visualization_commands()
+    register_code_review_commands()
+    register_patches_commands()
+    register_log_commands()
+  end
+
   create_commands()
 
   -- Load debug commands
@@ -307,9 +512,28 @@ function M.setup(opts)
     progress.setup()
   end)
 
+  -- Inicializar sistema de manejo de contexto para CopilotChat
+  pcall(function()
+    local context_handler = require("copilotchatassist.utils.context_handler")
+    context_handler.setup()
+  end)
+
+  -- Inicializar enriquecedor de contexto
+  pcall(function()
+    local context_enricher = require("copilotchatassist.context_enricher")
+    context_enricher.setup()
+  end)
+
+  -- Inicializar gestor de estado
+  pcall(function()
+    local state_manager = require("copilotchatassist.utils.state_manager")
+    state_manager.setup()
+  end)
+
   -- Respetar la configuración de log_level en lugar de forzar modo debug
   -- Solo establecer modo debug si el nivel es DEBUG o superior
-  if opts.log_level == nil or opts.log_level >= vim.log.levels.DEBUG then
+  local user_opts = opts or {}
+  if user_opts.log_level == nil or user_opts.log_level >= vim.log.levels.DEBUG then
     vim.g.copilotchatassist_debug = true
   else
     vim.g.copilotchatassist_debug = false
@@ -320,7 +544,7 @@ function M.setup(opts)
   vim.defer_fn(function()
     pcall(function()
       local documentation = require("copilotchatassist.documentation")
-      documentation.setup(opts.documentation or {})
+      documentation.setup((opts or {}).documentation or {})
     end)
   end, 100)
 
