@@ -16,6 +16,15 @@ function M.get_changed_lines_via_copilot(file_path, opts)
 
   log.debug("Solicitando diff a CopilotChat con comando: " .. command)
 
+  -- Iniciar spinner de progreso
+  local progress = require("copilotchatassist.utils.progress")
+  local options = require("copilotchatassist.options")
+  local spinner_id = "git_diff_copilot"
+  progress.start_spinner(spinner_id, "Getting Git diff via CopilotChat", {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
+
   -- Almacenar los resultados
   local result = {}
   local promise = vim.defer_fn(function() return {} end, 0)
@@ -57,6 +66,21 @@ function M.get_changed_lines_via_copilot(file_path, opts)
       end
 
       log.debug("Se encontraron " .. #result .. " rangos de líneas modificados en la respuesta de CopilotChat")
+
+      -- Detener spinner con éxito
+      progress.stop_spinner(spinner_id, true)
+
+      -- Mostrar resultado con spinner
+      local complete_spinner_id = "git_diff_complete"
+      progress.start_spinner(complete_spinner_id, "Found " .. #result .. " changed ranges", {
+        style = options.get().progress_indicator_style,
+        position = "statusline"
+      })
+
+      -- Detener el spinner después de 2 segundos
+      vim.defer_fn(function()
+        progress.stop_spinner(complete_spinner_id, true)
+      end, 2000)
     end,
     prompt_prefix = "Muestra el diff completo para el archivo " .. file_path .. " en formato unificado:",
     system_prompt = "Actúa como una herramienta git diff. Solo muestra el diff en formato unificado para el archivo específico. No incluyas ningún comentario ni explicación.",
@@ -149,15 +173,37 @@ function M.document_modified_elements()
           end
         end)
       elseif choice == "Documentar elementos modificados (via CopilotChat - origin/main..HEAD)" then
-        vim.notify("Obteniendo cambios desde origin/main..HEAD vía CopilotChat...", vim.log.levels.INFO)
+        -- Iniciar spinner de progreso
+        local progress = require("copilotchatassist.utils.progress")
+        local options = require("copilotchatassist.options")
+        local spinner_id = "document_changes_copilot"
+        progress.start_spinner(spinner_id, "Getting changes from origin/main..HEAD", {
+          style = options.get().progress_indicator_style,
+          position = "statusline"
+        })
 
         -- Detectar cambios con CopilotChat usando origin/main..HEAD
         local changed_elements = M.detect_changed_elements_via_copilot(buffer, { range = "origin/main..HEAD" })
         if #changed_elements > 0 then
-          doc.state.detected_items = changed_elements
-          doc._show_item_selector()
+          -- Detener spinner con éxito
+          progress.stop_spinner(spinner_id, true)
+
+          -- Mostrar spinner de resultado
+          local complete_spinner_id = "document_changes_complete"
+          progress.start_spinner(complete_spinner_id, "Found " .. #changed_elements .. " changed elements", {
+            style = options.get().progress_indicator_style,
+            position = "statusline"
+          })
+
+          -- Detener spinner de resultado después de mostrar selector
+          vim.defer_fn(function()
+            progress.stop_spinner(complete_spinner_id, true)
+            doc.state.detected_items = changed_elements
+            doc._show_item_selector()
+          end, 2000)
         else
-          vim.notify("No se detectaron cambios en origin/main..HEAD", vim.log.levels.INFO)
+          -- Detener spinner con estado neutro
+          progress.stop_spinner(spinner_id, nil)
         end
       elseif choice == "Documentar elementos modificados (via CopilotChat - personalizado)" then
         vim.ui.input({ prompt = "Rango personalizado (ej: HEAD~3..HEAD): " }, function(range)
@@ -165,15 +211,38 @@ function M.document_modified_elements()
             range = "origin/main..HEAD"
           end
 
-          vim.notify("Obteniendo cambios para " .. range .. " vía CopilotChat...", vim.log.levels.INFO)
+          -- Iniciar spinner de progreso
+          local progress = require("copilotchatassist.utils.progress")
+          local options = require("copilotchatassist.options")
+          local spinner_id = "document_changes_custom"
+          progress.start_spinner(spinner_id, "Getting changes for " .. range, {
+            style = options.get().progress_indicator_style,
+            position = "statusline"
+          })
 
           -- Detectar cambios con CopilotChat usando rango personalizado
           local changed_elements = M.detect_changed_elements_via_copilot(buffer, { range = range })
           if #changed_elements > 0 then
-            doc.state.detected_items = changed_elements
-            doc._show_item_selector()
+            -- Detener spinner con éxito
+            progress.stop_spinner(spinner_id, true)
+
+            -- Mostrar spinner de resultado
+            local complete_spinner_id = "document_custom_complete"
+            progress.start_spinner(complete_spinner_id, "Found " .. #changed_elements .. " changed elements in " .. range, {
+              style = options.get().progress_indicator_style,
+              position = "statusline"
+            })
+
+            -- Detener spinner de resultado después de mostrar selector
+            vim.defer_fn(function()
+              progress.stop_spinner(complete_spinner_id, true)
+              doc.state.detected_items = changed_elements
+              doc._show_item_selector()
+            end, 2000)
           else
-            vim.notify("No se detectaron cambios para el rango " .. range, vim.log.levels.INFO)
+            -- Detener spinner con estado neutro
+            progress.stop_spinner(spinner_id, nil)
+            log.info("No se detectaron cambios para el rango " .. range)
           end
         end)
       end

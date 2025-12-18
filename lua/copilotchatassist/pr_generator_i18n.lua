@@ -5,7 +5,7 @@ local log = require("copilotchatassist.utils.log")
 local file_utils = require("copilotchatassist.utils.file")
 local copilot_api = require("copilotchatassist.copilotchat_api")
 local i18n = require("copilotchatassist.i18n")
-local options = require("copilotchatassist.options")
+local notify = require("copilotchatassist.utils.notify")
 
 -- Estado del módulo
 M.state = {
@@ -391,7 +391,7 @@ function M.enhance_pr(opts)
       if new_desc then
         update_pr_description(new_desc)
         -- Command completion - show at INFO level
-        vim.notify("PR description created.", vim.log.levels.INFO, { timeout = 2000 })
+        notify.success("PR description created.", {force = true})
       end
     end)
     return
@@ -411,20 +411,27 @@ function M.enhance_pr(opts)
   log.info("Idioma configurado para usar: " .. target_language)
 
   -- Crear identificador para notificación
-  -- Use debug level for progress instead of notification
+  -- Utilizar el sistema de progreso visual para mostrar el avance
+  local progress = require("copilotchatassist.utils.progress")
+  local spinner_id = "enhance_pr"
+  progress.start_spinner(spinner_id, "Enhancing PR description", {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
+
+  -- Mantener también log para debug
   log.debug("Enhancing PR description with CopilotChat...")
-  -- Create a notification ID for later use but don't show notification
-  local notify_id = nil
 
   -- Configurar timeout con valor más alto para evitar problemas con PRs grandes
   local timeout_timer = vim.loop.new_timer()
   timeout_timer:start(300000, 0, vim.schedule_wrap(function()
     -- Si llegamos aquí, la solicitud nunca completó
-    -- Clear any status line messages
-    vim.cmd("echo ''") -- Limpiar mensaje de estado
+    -- Detener el spinner
+    progress.stop_spinner(spinner_id, false)
+
     log.warn("Timeout alcanzado. La operación tomó demasiado tiempo.")
 
-    -- No need to close notifications since we're using debug logs
+    -- Detener y cerrar timer
     if timeout_timer then
       timeout_timer:stop()
       timeout_timer:close()
@@ -574,10 +581,11 @@ function M.enhance_pr(opts)
   copilot_api.ask(simplified_prompt, {
     system_prompt = "You are an expert in documentation and translation focused on Pull Request descriptions. You provide clear, concise, and accurate descriptions with diagrams when helpful. For Mermaid diagrams, you use extremely simple and valid syntax to avoid parsing errors. You never use parentheses or special characters in node text. You use short node names like A, B, C with simple text descriptions.",
     callback = function(response)
-      -- Clean up any status messages
-      vim.cmd("echo ''") -- Limpiar mensaje de estado
+      -- Detener el spinner con resultado exitoso si hay respuesta
+      local success = response ~= nil
+      progress.stop_spinner(spinner_id, success)
 
-      -- Cancel timeout timer
+      -- Cancelar timeout timer
       if timeout_timer then
         timeout_timer:stop()
         timeout_timer:close()
@@ -623,7 +631,7 @@ function M.enhance_pr(opts)
 
         -- Actualizar la notificación existente con un timeout
         -- para asegurar que desaparezca si hay algún problema posterior
-        vim.notify(action_msg, vim.log.levels.INFO, {
+        notify.info(action_msg, {
           title = "PR Enhancement",
           timeout = 10000,  -- 10 segundos de timeout por si acaso
           replace = notify_id
@@ -640,9 +648,17 @@ function M.enhance_pr(opts)
 
           -- Asegurar que la notificación se cierra después de mostrar el éxito
           -- Utilizamos timeout corto para que desaparezca
-          -- Command completion - show at INFO level
-          vim.notify("PR enhancement complete.", vim.log.levels.INFO, { timeout = 2000 })
-          local success_notify_id = nil
+          -- En lugar de mostrar notificación, usar un spinner exitoso final
+        local final_spinner_id = "enhance_pr_completed"
+        progress.start_spinner(final_spinner_id, "PR enhancement completed", {
+          style = options.get().progress_indicator_style,
+          position = "statusline"
+        })
+
+        -- Detener el spinner automáticamente después de 2 segundos
+        vim.defer_fn(function()
+          progress.stop_spinner(final_spinner_id, true)
+        end, 2000)
 
           -- No need to clean up notifications anymore  -- 5.5 segundos, justo después de que la notificación de éxito desaparezca
 
@@ -651,24 +667,17 @@ function M.enhance_pr(opts)
             M.state.pr_language = target_language
           end
         else
-          -- Always show errors but with shorter timeout
-          local error_notify_id = vim.notify("Failed to update PR description.",
-                    vim.log.levels.ERROR, {
-                      title = "PR Enhancement",
-                      timeout = 3000
-                    })
+          -- Mostrar un spinner de error en lugar de notificación
+        local error_spinner_id = "pr_update_error"
+        progress.start_spinner(error_spinner_id, "Error updating PR description", {
+          style = options.get().progress_indicator_style,
+          position = "statusline"
+        })
 
-          -- También forzar limpieza en caso de error
-          vim.defer_fn(function()
-            vim.notify("", vim.log.levels.INFO, {
-              replace = notify_id,
-              timeout = 1
-            })
-            vim.notify("", vim.log.levels.INFO, {
-              replace = error_notify_id,
-              timeout = 1
-            })
-          end, 5500)
+        -- Detener el spinner con estado de error
+        vim.defer_fn(function()
+          progress.stop_spinner(error_spinner_id, false)
+        end, 2000)
         end
       else
         if not new_desc or new_desc == "" then
@@ -694,7 +703,7 @@ function M.change_pr_language(target_language)
   -- Validar idioma solicitado
   if not M.supported_languages[target_language] then
     log.error("Idioma no soportado: " .. target_language)
-    vim.notify("Idioma no soportado: " .. target_language, vim.log.levels.ERROR)
+    notify.error("Idioma no soportado: " .. target_language)
     return
   end
 
@@ -702,7 +711,7 @@ function M.change_pr_language(target_language)
   local old_desc = get_pr_description()
   if not old_desc or old_desc == "" then
     log.warn("No se encontró descripción del PR para traducir")
-    vim.notify("No se encontró descripción del PR para traducir", vim.log.levels.WARN)
+    notify.warn("No se encontró descripción del PR para traducir")
     return
   end
 
@@ -713,12 +722,12 @@ function M.change_pr_language(target_language)
   -- Verificar si ya está en el idioma destino
   if current_detected_language == target_language then
     log.info("La descripción ya está en el idioma solicitado: " .. target_language)
-    vim.notify("La descripción del PR ya está en " .. target_language, vim.log.levels.INFO)
+    notify.info("La descripción del PR ya está en " .. target_language)
     return
   end
 
   -- Notificar al usuario
-  vim.notify("Traduciendo descripción del PR de " .. current_detected_language .. " a " .. target_language .. "...", vim.log.levels.INFO)
+  notify.info("Traduciendo descripción del PR de " .. current_detected_language .. " a " .. target_language .. "...")
   log.info("Traduciendo descripción del PR de " .. current_detected_language .. " a " .. target_language)
 
   -- Log the activity instead of using spinner
@@ -735,13 +744,13 @@ function M.change_pr_language(target_language)
     -- Verificar resultado de la traducción
     if not translated_desc or translated_desc == "" then
       log.error("Error al traducir la descripción del PR - respuesta vacía")
-      vim.notify("Error al traducir la descripción del PR", vim.log.levels.ERROR)
+      notify.error("Error al traducir la descripción del PR")
       return
     end
 
     if translated_desc == old_desc then
       log.warn("La traducción no cambió el contenido original")
-      vim.notify("La traducción no produjo cambios en el contenido", vim.log.levels.WARN)
+      notify.warn("La traducción no produjo cambios en el contenido")
       return
     end
 
@@ -774,7 +783,7 @@ function M.change_pr_language(target_language)
 
     -- Actualizar la descripción del PR
     log.info("Actualizando descripción del PR en GitHub...")
-    vim.notify("Actualizando PR con descripción traducida...", vim.log.levels.INFO)
+    notify.info("Actualizando PR con descripción traducida...")
 
     -- Función para intentar actualizar con reintentos
     local function try_update(attempt)
@@ -782,7 +791,7 @@ function M.change_pr_language(target_language)
 
       if attempt > max_attempts then
         log.error("Error al actualizar la descripción del PR después de " .. max_attempts .. " intentos")
-        vim.notify("Error al actualizar la descripción del PR en GitHub", vim.log.levels.ERROR)
+        notify.error("Error al actualizar la descripción del PR en GitHub")
         return
       end
 
@@ -800,20 +809,20 @@ function M.change_pr_language(target_language)
       -- Procesar el resultado
       if success then
         log.info("Descripción del PR traducida con éxito a " .. target_language)
-        vim.notify("Descripción del PR traducida con éxito a " .. target_language, vim.log.levels.INFO)
+        notify.success("Descripción del PR traducida con éxito a " .. target_language, {force = true})
         -- Actualizar el idioma registrado
         M.state.pr_language = target_language
       else
         if attempt < max_attempts then
           log.warn("Intento " .. attempt .. " falló. Reintentando en 2 segundos...")
-          vim.notify("Error al actualizar PR. Reintentando...", vim.log.levels.WARN)
+          notify.warn("Error al actualizar PR. Reintentando...")
           -- Programar el próximo intento de forma asíncrona
           vim.defer_fn(function()
             try_update(attempt + 1)
           end, 2000)  -- Esperar 2 segundos
         else
           log.error("Error al actualizar la descripción traducida en GitHub")
-          vim.notify("Error al actualizar la descripción del PR en GitHub", vim.log.levels.ERROR)
+          notify.error("Error al actualizar la descripción del PR en GitHub")
         end
       end
     end
@@ -829,7 +838,7 @@ function M.simple_change_pr_language(target_language)
   -- Validar idioma solicitado
   if not M.supported_languages[target_language] then
     log.error("Idioma no soportado: " .. target_language)
-    vim.notify("Idioma no soportado: " .. target_language, vim.log.levels.ERROR)
+    notify.error("Idioma no soportado: " .. target_language)
     return
   end
 
@@ -837,7 +846,7 @@ function M.simple_change_pr_language(target_language)
   local old_desc = get_pr_description()
   if not old_desc or old_desc == "" then
     log.warn("No se encontró descripción del PR para traducir")
-    vim.notify("No se encontró descripción del PR para traducir", vim.log.levels.WARN)
+    notify.warn("No se encontró descripción del PR para traducir")
     return
   end
 
@@ -847,35 +856,25 @@ function M.simple_change_pr_language(target_language)
   -- Verificar si ya está en el idioma destino
   if current_detected_language == target_language then
     log.info("La descripción ya está en el idioma solicitado: " .. target_language)
-    vim.notify("La descripción del PR ya está en " .. target_language, vim.log.levels.INFO)
+    notify.info("La descripción del PR ya está en " .. target_language)
     return
   end
 
-  -- Notificar inicio del proceso
-  local notify_id = vim.notify("Procesando PR de " .. current_detected_language .. " a " .. target_language .. "...",
-                             vim.log.levels.INFO, {
-                               title = "PR Translation",
-                               timeout = false
-                             })
+  -- Utilizar el sistema de progreso visual centralizado
+  local progress = require("copilotchatassist.utils.progress")
+  local spinner_id = "change_pr_language"
 
-  -- Crear spinner para mostrar progreso
-  local spinner = {
-    frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
-    idx = 1,
-    timer = vim.loop.new_timer(),
-    active = true
-  }
+  -- Iniciar spinner con mensaje en el idioma apropiado
+  local message = "Translating PR from " .. current_detected_language .. " to " .. target_language
+  if target_language == "spanish" then
+    message = "Traduciendo PR de " .. current_detected_language .. " a " .. target_language
+  end
 
   -- Iniciar spinner
-  spinner.timer:start(100, 100, function()
-    vim.schedule(function()
-      if spinner.active then
-        local frame = spinner.frames[spinner.idx]
-        spinner.idx = (spinner.idx % #spinner.frames) + 1
-        vim.cmd(string.format("echo '%s Procesando PR...'", frame))
-      end
-    end)
-  end)
+  progress.start_spinner(spinner_id, message, {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
 
   -- Crear un prompt que le pida a CopilotChat traducir y actualizar en un solo paso
   local prompt = string.format([[
@@ -898,13 +897,9 @@ function M.simple_change_pr_language(target_language)
   copilot_api.ask(prompt, {
     system_prompt = "You are a translation expert focusing on technical documentation with precise formatting preservation.",
     callback = function(response)
-      -- Detener el spinner
-      spinner.active = false
-      if spinner.timer then
-        spinner.timer:stop()
-        spinner.timer:close()
-      end
-      vim.cmd("echo ''")
+      -- Detener el spinner del sistema de progreso
+      local success = response ~= nil
+      progress.stop_spinner(spinner_id, success)
 
       -- Procesar la respuesta
       local new_desc
@@ -914,8 +909,7 @@ function M.simple_change_pr_language(target_language)
         new_desc = response.content
       else
         log.error("Formato de respuesta no reconocido")
-        vim.notify("Error: formato de respuesta no reconocido",
-                  vim.log.levels.ERROR, {
+        notify.error("Error: formato de respuesta no reconocido", {
                     title = "PR Translation",
                     timeout = 5000,
                     replace = notify_id
@@ -926,8 +920,7 @@ function M.simple_change_pr_language(target_language)
       -- Verificar que obtuvimos una respuesta válida
       if not new_desc or new_desc == "" then
         log.error("La traducción devolvió un resultado vacío")
-        vim.notify("Error: traducción vacía",
-                  vim.log.levels.ERROR, {
+        notify.error("Error: traducción vacía", {
                     title = "PR Translation",
                     timeout = 5000,
                     replace = notify_id
@@ -946,27 +939,43 @@ function M.simple_change_pr_language(target_language)
         log.debug("Traducción guardada en " .. debug_file)
       end
 
-      -- Notificar progreso
-      vim.notify("Traducción completada. Actualizando PR...",
-                vim.log.levels.INFO, {
-                  title = "PR Translation",
-                  timeout = false,
-                  replace = notify_id
-                })
+      -- Actualizar el spinner en lugar de mostrar notificación
+      progress.update_spinner(spinner_id, "Traducción completada. Actualizando PR...")
 
       -- Actualizar la descripción del PR
       local success = update_pr_description(new_desc)
 
       if success then
         log.info("PR actualizado correctamente a " .. target_language)
-        -- Command completion - show at INFO level
-        vim.notify("PR translation complete.", vim.log.levels.INFO, { timeout = 2000 })
+
+        -- En lugar de notificación, mostrar un spinner final con éxito
+        local final_spinner_id = "translation_completed"
+        progress.start_spinner(final_spinner_id, "PR translation completed", {
+          style = options.get().progress_indicator_style,
+          position = "statusline"
+        })
+
+        -- Detener el spinner automáticamente después de 2 segundos
+        vim.defer_fn(function()
+          progress.stop_spinner(final_spinner_id, true)
+        end, 2000)
+
         -- Actualizar el idioma registrado
         M.state.pr_language = target_language
       else
         log.error("Error al actualizar la descripción del PR")
-        -- Just log errors instead of showing notifications
-        log.error("Error al actualizar PR")
+
+        -- Mostrar un spinner de error en lugar de notificación
+        local error_spinner_id = "translation_error"
+        progress.start_spinner(error_spinner_id, "Error updating PR description", {
+          style = options.get().progress_indicator_style,
+          position = "statusline"
+        })
+
+        -- Detener el spinner con estado de error
+        vim.defer_fn(function()
+          progress.stop_spinner(error_spinner_id, false)
+        end, 2000)
       end
     end
   })

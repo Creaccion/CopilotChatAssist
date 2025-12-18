@@ -7,6 +7,7 @@ Este documento detalla todas las opciones de configuración disponibles para per
 - [Configuración básica](#configuración-básica)
 - [Opciones de lenguaje](#opciones-de-lenguaje)
 - [Opciones de interfaz de usuario](#opciones-de-interfaz-de-usuario)
+- [Indicadores de progreso](#indicadores-de-progreso)
 - [Configuración del modelo](#configuración-del-modelo)
 - [Opciones de TODOs](#opciones-de-todos)
 - [Opciones de log y depuración](#opciones-de-log-y-depuración)
@@ -77,6 +78,23 @@ vim.api.nvim_command('highlight CopilotTodoPriority2 guifg=#ffaf00 gui=bold')
 vim.api.nvim_command('highlight CopilotTodoPriority3 guifg=#ffd700 gui=bold')
 vim.api.nvim_command('highlight CopilotTodoPriority4 guifg=#61afef gui=bold')
 vim.api.nvim_command('highlight CopilotTodoPriority5 guifg=#888888 gui=italic')
+```
+
+## Indicadores de progreso
+
+Configura el comportamiento de los indicadores visuales para operaciones largas:
+
+| Opción | Tipo | Valor predeterminado | Descripción |
+|--------|------|----------------------|-------------|
+| `use_progress_indicator` | boolean | true | Activa o desactiva los indicadores visuales de progreso |
+| `progress_indicator_style` | string | "dots" | Estilo visual del spinner ("dots", "line", "braille", "circle", "moon", "arrow", "bar") |
+
+```lua
+-- Ejemplo: Configurar indicadores de progreso
+require("copilotchatassist").setup({
+  use_progress_indicator = true,
+  progress_indicator_style = "braille", -- Usar el estilo braille para los spinners
+})
 ```
 
 ## Configuración del modelo
@@ -150,6 +168,8 @@ require("copilotchatassist").setup({
   model = "gpt-4.1",
   temperature = 0.1,
   log_level = vim.log.levels.INFO,
+  use_progress_indicator = true,
+  progress_indicator_style = "dots",
 })
 ```
 

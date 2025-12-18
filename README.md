@@ -6,6 +6,8 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 
 - **Sistema de gestión de TODOs**: Genera, visualiza y gestiona tareas basadas en el contexto de tu proyecto.
 - **Gestión contextual de trabajo**: Mantiene automáticamente el contexto de tu trabajo basado en la rama actual y los tickets.
+- **Sistema de Code Review**: Analiza cambios en el Git diff y genera comentarios clasificados y accionables.
+- **Indicadores de progreso visual**: Muestra el estado de operaciones largas con spinners y barras de progreso.
 - **Sistema de patches de código**: Extrae, visualiza y aplica automáticamente bloques de código desde CopilotChat a tus archivos.
 - **Integración con Copilot**: Aprovecha la potencia de Copilot para automatizar tareas de programación.
 - **Ventanas flotantes personalizables**: Visualiza información y resultados en ventanas flotantes personalizadas.
@@ -52,6 +54,12 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 | `temperature` | number | 0.1 | Temperatura para las respuestas (menor es más determinista) |
 | `log_level` | number | vim.log.levels.INFO | Nivel de logs (ERROR, WARN, INFO, DEBUG, TRACE) |
 | `todo_split_orientation` | string | "vertical" | Orientación de la ventana de TODOs ("vertical"/"horizontal") |
+| `notification_level` | number | vim.log.levels.INFO | Nivel de las notificaciones estándar |
+| `notification_timeout` | number | 2000 | Tiempo de duración de las notificaciones (ms) |
+| `success_notification_level` | number | vim.log.levels.INFO | Nivel para notificaciones de éxito |
+| `silent_mode` | boolean | false | Si es true, reduce el número de notificaciones mostradas |
+| `use_progress_indicator` | boolean | true | Activa los indicadores visuales de progreso para operaciones largas |
+| `progress_indicator_style` | string | "dots" | Estilo del indicador de progreso (dots, line, braille, circle, moon, arrow, bar) |
 
 ## Comandos
 
@@ -74,6 +82,14 @@ CopilotChatAssist es un plugin para Neovim que actúa como una capa adicional so
 - `:CopilotPatchesApply` - Aplica todos los patches pendientes
 - `:CopilotPatchesClearQueue` - Limpia la cola de patches
 - `:CopilotPatchesProcessBuffer` - Procesa el buffer actual buscando patches
+
+### Code Review
+
+- `:CopilotCodeReview` - Inicia una revisión de código basada en Git diff
+- `:CopilotCodeReviewList` - Muestra la lista de comentarios de la revisión
+- `:CopilotCodeReviewStats` - Muestra estadísticas de la revisión actual
+- `:CopilotCodeReviewExport` - Exporta la revisión a un archivo JSON
+- `:CopilotCodeReviewReanalyze` - Re-analiza cambios para actualizar estado de comentarios
 
 ### Generación de documentación y PRs
 
@@ -132,6 +148,8 @@ Para más detalles sobre el uso, consulta los siguientes recursos:
 - [Guía de usuario](docs/usage_examples.md) - Ejemplos detallados de uso
 - [Sistema de TODOs](docs/todo_system.md) - Documentación del sistema de TODOs
 - [Sistema de Patches](docs/patches_system.md) - Documentación del sistema de patches
+- [Sistema de Code Review](docs/code_review_system.md) - Documentación del sistema de Code Review
+- [Sistema de Progreso Visual](docs/progress_system.md) - Indicadores de progreso para operaciones largas
 - [Configuración](docs/configuration.md) - Opciones de configuración detalladas
 - [Estado de implementación](implementation_status.md) - Información sobre el estado actual de la simplificación
 - [Resolución de problemas](docs/troubleshooting.md) - Guía de resolución de problemas

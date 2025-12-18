@@ -9,6 +9,100 @@ local log = require("copilotchatassist.utils.log")
 local translations = {
   -- Español
   spanish = {
+    -- Code Review
+    code_review = {
+      starting_review = "Iniciando revisión de código...",
+      opening_window = "Abriendo ventana de comentarios...",
+      no_changes = "No se encontraron cambios para revisar",
+      invalid_response = "La respuesta de CopilotChat no es válida",
+      saved_debug_file = "Respuesta guardada en %s para depuración",
+      no_comments_found = "No se encontraron comentarios en la respuesta",
+      found_comments = "Se encontraron %d comentarios",
+      review_completed = "Revisión completada con %d comentarios",
+      no_current_review = "No hay una revisión actual para mostrar",
+      reanalysis_complete = "Re-análisis de cambios completado",
+      review_reset = "Revisión limpiada correctamente",
+      export_success = "Revisión exportada a %s",
+      export_failed = "Error al exportar revisión a %s",
+      storage_init_failed = "Error al inicializar almacenamiento en %s",
+      index_loaded = "Índice cargado con %d revisiones",
+      index_parse_failed = "Error al analizar índice de revisiones",
+      index_save_failed = "Error al guardar índice de revisiones",
+      invalid_review = "Revisión inválida",
+      review_saved = "Revisión %s guardada",
+      review_save_failed = "Error al guardar revisión %s",
+      review_not_found = "Revisión %s no encontrada",
+      review_empty = "Revisión %s vacía",
+      review_parse_failed = "Error al analizar revisión %s",
+      review_malformed = "Revisión %s malformada",
+      review_loaded = "Revisión %s cargada con %d comentarios",
+      no_last_review = "No hay revisión previa disponible",
+      review_deleted = "Revisión %s eliminada",
+      review_delete_failed = "Error al eliminar revisión %s",
+      no_review_to_export = "No hay revisión disponible para exportar",
+      review_exported = "Revisión %s exportada a %s",
+      comment_auto_resolved = "Comentario %s marcado como resuelto automáticamente",
+      comment_modified = "Comentario %s marcado como modificado",
+      file_not_found = "Archivo no encontrado: %s",
+      window_title = "Comentarios de Code Review",
+      filtered_by = "Filtrado por:",
+      filter_classification = "Clasificación",
+      filter_severity = "Severidad",
+      filter_status = "Estado",
+      filter_file = "Archivo",
+      no_comments = "No hay comentarios para mostrar",
+      window_opened = "Ventana de comentarios abierta",
+      window_closed = "Ventana de comentarios cerrada",
+      window_invalid = "Ventana de comentarios inválida",
+      buffer_invalid = "Buffer de ventana inválido",
+      window_refreshed = "Ventana de comentarios actualizada",
+      comment_details = "Detalles del Comentario",
+      detail_file = "Archivo",
+      detail_line = "Línea",
+      detail_classification = "Clasificación",
+      detail_severity = "Severidad",
+      detail_status = "Estado",
+      detail_code_context = "Contexto de Código",
+      detail_comment = "Comentario",
+      detail_actions = "Acciones",
+      action_change_status = "Cambiar estado",
+      action_goto_location = "Ir a ubicación",
+      action_close = "Cerrar",
+      showing_comment_details = "Mostrando detalles del comentario",
+      select_status = "Seleccionar estado",
+      status_updated = "Estado del comentario actualizado",
+      went_to_location = "Navegando a %s:%d",
+      select_filter_type = "Seleccionar tipo de filtro",
+      filter_by_classification = "Filtrar por clasificación",
+      filter_by_severity = "Filtrar por severidad",
+      filter_by_status = "Filtrar por estado",
+      filter_by_file = "Filtrar por archivo",
+      select_classification = "Seleccionar clasificación",
+      select_severity = "Seleccionar severidad",
+      select_file = "Seleccionar archivo",
+      filters_cleared = "Filtros eliminados",
+      statistics_title = "Estadísticas de la Revisión",
+      total_comments = "Total de comentarios",
+      by_status = "Por estado",
+      by_severity = "Por severidad",
+      by_classification = "Por clasificación",
+      by_file = "Por archivo",
+      stats_summary = "Resumen: %d comentarios (%d abiertos, %d resueltos, %d críticos/altos)",
+      showing_statistics = "Mostrando estadísticas",
+      help_title = "Ayuda de Code Review",
+      help_main_window = "Ventana principal",
+      help_details_window = "Ventana de detalles",
+      help_close = "Cerrar ventana",
+      help_show_details = "Ver detalles del comentario",
+      help_change_status = "Cambiar estado del comentario",
+      help_goto_location = "Ir a ubicación del comentario",
+      help_apply_filter = "Aplicar filtros",
+      help_clear_filters = "Limpiar filtros",
+      help_refresh = "Refrescar vista",
+      help_show_help = "Mostrar esta ayuda",
+      showing_help = "Mostrando ayuda"
+    },
+
     -- Menús y opciones generales
     menu = {
       what_action = "¿Qué acción deseas realizar?",
@@ -18,6 +112,25 @@ local translations = {
       advanced_options = "Opciones avanzadas",
       cancel = "Cancelar",
       back_to_main = "Volver al menú principal",
+    },
+
+    -- Mensajes de contexto
+    context = {
+      context_loaded = "Contexto del proyecto cargado con éxito para uso con IA",
+      context_loaded_combined = "Contexto del proyecto combinado cargado con éxito para uso con IA",
+      no_context_files = "No se encontraron archivos de contexto. Por favor, crea el requerimiento o síntesis",
+      context_updated = "Contexto del proyecto actualizado correctamente",
+      ticket_context_saved = "Síntesis de contexto del ticket guardada",
+      project_context_saved = "Contexto del proyecto guardado: %s",
+      context_synthesis_saved = "Síntesis de contexto guardada: %s",
+      generating_ticket_synthesis = "Generando síntesis del ticket...",
+      generating_project_synthesis = "Generando síntesis del proyecto...",
+      project_synthesis_not_ready = "La síntesis del proyecto aún no está lista. Por favor, intenta de nuevo en un momento",
+      paste_requirement = "Pega o escribe el requerimiento, luego guarda y cierra el buffer",
+      context_creation_cancelled = "Creación de contexto cancelada por el usuario",
+      jira_ticket_detected = "Ticket de Jira detectado: %s. Pega el requerimiento desde Jira en el buffer",
+      no_jira_ticket = "No se detectó ticket de Jira. Se usará contexto de proyecto personal",
+      analyzing_project = "Analizando proyecto con requerimiento:\n%s",
     },
 
     -- Opciones avanzadas de documentación
@@ -85,6 +198,119 @@ local translations = {
 
   -- Inglés
   english = {
+    -- Context messages
+    context = {
+      context_loaded = "Project context successfully loaded for AI use",
+      context_loaded_combined = "Combined project context successfully loaded for AI use",
+      no_context_files = "No context files found. Please create requirement or synthesis",
+      context_updated = "Project context successfully updated",
+      ticket_context_saved = "Ticket context synthesis saved",
+      project_context_saved = "Project context saved: %s",
+      context_synthesis_saved = "Context synthesis saved: %s",
+      generating_ticket_synthesis = "Generating ticket synthesis...",
+      generating_project_synthesis = "Generating project synthesis...",
+      project_synthesis_not_ready = "Project synthesis is not ready yet. Please try again in a moment",
+      paste_requirement = "Paste or type the requirement, then save and close the buffer",
+      context_creation_cancelled = "Context creation cancelled by user",
+      jira_ticket_detected = "Jira ticket detected: %s. Paste the requirement from Jira in the buffer",
+      no_jira_ticket = "No Jira ticket detected. Personal project context will be used",
+      analyzing_project = "Analyzing project with requirement:\n%s",
+    },
+
+    -- Code Review
+    code_review = {
+      starting_review = "Starting code review...",
+      opening_window = "Opening comments window...",
+      no_changes = "No changes found to review",
+      invalid_response = "Invalid response from CopilotChat",
+      saved_debug_file = "Response saved to %s for debugging",
+      no_comments_found = "No comments found in the response",
+      found_comments = "Found %d comments",
+      review_completed = "Review completed with %d comments",
+      no_current_review = "No current review to display",
+      reanalysis_complete = "Re-analysis of changes completed",
+      review_reset = "Review successfully reset",
+      export_success = "Review exported to %s",
+      export_failed = "Failed to export review to %s",
+      storage_init_failed = "Failed to initialize storage at %s",
+      index_loaded = "Index loaded with %d reviews",
+      index_parse_failed = "Failed to parse review index",
+      index_save_failed = "Failed to save review index",
+      invalid_review = "Invalid review",
+      review_saved = "Review %s saved",
+      review_save_failed = "Failed to save review %s",
+      review_not_found = "Review %s not found",
+      review_empty = "Review %s is empty",
+      review_parse_failed = "Failed to parse review %s",
+      review_malformed = "Review %s is malformed",
+      review_loaded = "Review %s loaded with %d comments",
+      no_last_review = "No previous review available",
+      review_deleted = "Review %s deleted",
+      review_delete_failed = "Failed to delete review %s",
+      no_review_to_export = "No review available to export",
+      review_exported = "Review %s exported to %s",
+      comment_auto_resolved = "Comment %s automatically marked as resolved",
+      comment_modified = "Comment %s marked as modified",
+      file_not_found = "File not found: %s",
+      window_title = "Code Review Comments",
+      filtered_by = "Filtered by:",
+      filter_classification = "Classification",
+      filter_severity = "Severity",
+      filter_status = "Status",
+      filter_file = "File",
+      no_comments = "No comments to display",
+      window_opened = "Comments window opened",
+      window_closed = "Comments window closed",
+      window_invalid = "Comments window is invalid",
+      buffer_invalid = "Window buffer is invalid",
+      window_refreshed = "Comments window refreshed",
+      comment_details = "Comment Details",
+      detail_file = "File",
+      detail_line = "Line",
+      detail_classification = "Classification",
+      detail_severity = "Severity",
+      detail_status = "Status",
+      detail_code_context = "Code Context",
+      detail_comment = "Comment",
+      detail_actions = "Actions",
+      action_change_status = "Change status",
+      action_goto_location = "Go to location",
+      action_close = "Close",
+      showing_comment_details = "Showing comment details",
+      select_status = "Select status",
+      status_updated = "Comment status updated",
+      went_to_location = "Navigating to %s:%d",
+      select_filter_type = "Select filter type",
+      filter_by_classification = "Filter by classification",
+      filter_by_severity = "Filter by severity",
+      filter_by_status = "Filter by status",
+      filter_by_file = "Filter by file",
+      select_classification = "Select classification",
+      select_severity = "Select severity",
+      select_file = "Select file",
+      filters_cleared = "Filters cleared",
+      statistics_title = "Review Statistics",
+      total_comments = "Total comments",
+      by_status = "By status",
+      by_severity = "By severity",
+      by_classification = "By classification",
+      by_file = "By file",
+      stats_summary = "Summary: %d comments (%d open, %d resolved, %d critical/high)",
+      showing_statistics = "Showing statistics",
+      help_title = "Code Review Help",
+      help_main_window = "Main window",
+      help_details_window = "Details window",
+      help_close = "Close window",
+      help_show_details = "View comment details",
+      help_change_status = "Change comment status",
+      help_goto_location = "Go to comment location",
+      help_apply_filter = "Apply filters",
+      help_clear_filters = "Clear filters",
+      help_refresh = "Refresh view",
+      help_show_help = "Show this help",
+      showing_help = "Showing help"
+    },
+
     -- Menus and general options
     menu = {
       what_action = "What action would you like to perform?",
@@ -187,6 +413,54 @@ function M.get_code_language()
     lang = "english"
   end
   return lang
+end
+
+-- Traducir texto mediante CopilotChat
+-- @param text string: Texto a traducir
+-- @param target_language string: Idioma de destino
+-- @param callback function: Callback para recibir el resultado (opcional)
+local function translate_with_copilot(text, target_language, callback)
+  -- Si el texto está vacío, retornar de inmediato
+  if not text or text == "" then
+    if callback then callback(text) end
+    return text
+  end
+
+  -- Usar CopilotChat para traducir
+  local copilotchat_api = require("copilotchatassist.copilotchat_api")
+
+  -- Crear un prompt para solicitar la traducción
+  local prompt
+  if target_language == "spanish" then
+    prompt = "Traduce el siguiente texto del inglés al español. Retorna SOLO el texto traducido sin explicaciones o formato adicional:\n\n" .. text
+  else
+    prompt = "Translate the following text from Spanish to English. Return ONLY the translated text without explanations or formatting:\n\n" .. text
+  end
+
+  -- Llamar a CopilotChat con un sistema específico para traducción
+  copilotchat_api.ask(prompt, {
+    system_prompt = "Eres un traductor profesional que traduce texto con precisión entre idiomas, manteniendo el significado y tono originales.",
+    callback = function(response)
+      local translated_text = response
+      if type(response) == "table" and response.content then
+        translated_text = response.content
+      end
+
+      -- Limpiar formato si existe
+      if type(translated_text) == "string" then
+        translated_text = translated_text:gsub("```[^`]*\n", ""):gsub("```", "")
+        translated_text = translated_text:gsub("^%s*(.-)%s*$", "%1")
+      end
+
+      if callback then
+        callback(translated_text)
+      end
+    end
+  })
+
+  -- Para llamadas síncronas, retornar el texto original
+  -- (la traducción se manejará en el callback)
+  return text
 end
 
 -- Traducir una clave específica

@@ -49,40 +49,102 @@ end
 -- Main function for sending requests to CopilotChat
 function M.ask(message, opts)
   opts = opts or {}
+
+  -- Establecer la opción headless por defecto en true para ocultar la ventana
+  if opts.headless == nil then
+    opts.headless = true
+  end
+
   if not opts.system_prompt then
     opts.system_prompt = options.get().system_prompt or
       require("copilotchatassist.prompts.system").default
   end
 
-  -- Enable debug mode
-  vim.g.copilotchatassist_debug = true
+  -- Configurar un timeout para evitar bloqueos indefinidos
+  local timeout_ms = opts.timeout or 120000 -- 2 minutos por defecto
+  local timer = nil
+
+  -- Si hay un callback, crear un timer de timeout
+  if opts.callback and type(opts.callback) == "function" then
+    timer = vim.loop.new_timer()
+    timer:start(timeout_ms, 0, vim.schedule_wrap(function()
+      log.error("Timeout alcanzado al esperar respuesta de CopilotChat. La operación tomó más de " .. (timeout_ms/1000) .. " segundos.")
+
+      -- Si hay un callback original, envolvemos para pasar un mensaje de error
+      if opts.callback then
+        opts.callback(nil)
+      end
+
+      -- Limpiar timer
+      if timer then
+        timer:stop()
+        timer:close()
+      end
+    end))
+  end
+
+  -- Respetar la configuración de nivel de log
+  -- No forzar modo debug para respetar log_level
+  vim.g.copilotchatassist_silent = true
 
   -- Log the request (protected against errors)
   pcall(function()
-    if log and log.debug then
-      log.debug({
-        english = "Sending request to CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "..."),
-        spanish = "Enviando solicitud a CopilotChat: " .. (string_utils and string_utils.truncate_string and string_utils.truncate_string(message, 100) or string.sub(message, 1, 100) .. "...")
-      })
-    end
+    -- No mostrar mensajes de debug sobre envío de solicitud a CopilotChat
   end)
 
-  -- Save complete prompt for debugging
-  save_debug_info(message, "last_prompt")
+  -- Guardar el prompt completo para depuración
+  local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+  vim.fn.mkdir(debug_dir, "p")
+  local debug_file = debug_dir .. "/last_prompt.txt"
+  local file = io.open(debug_file, "w")
+  if file then
+    file:write(message)
+    file:close()
+    -- No mostrar mensaje de debug sobre guardar prompt
+  end
 
   -- Wrap the original callback to process patches
   local original_callback = opts.callback
-  opts.callback = function(response)
-    -- Process patches in the response
-    process_response(response)
+  if opts.callback and type(opts.callback) == "function" then
+    opts.callback = function(response)
+      -- Cancelar el timer de timeout si existe
+      if timer then
+        timer:stop()
+        timer:close()
+        timer = nil
+      end
 
-    -- Save raw response for debugging
-    if response then
-      local content = type(response) == "string"
-        and response
-        or vim.inspect(response)
+      add_to_history(message, response)
 
-      save_debug_info(message, "response_raw", content)
+      -- Proteger contra respuestas malformadas o inexistentes
+      if response == nil then
+        log.error("No se recibió respuesta de CopilotChat (timeout o error interno)")
+        original_callback(nil)  -- Pasar nil para indicar error
+        return
+      end
+
+      -- Ejecutar callback original protegido solo si no es nil
+      -- Esto evita callbacks cíclicos y dobles ejecuciones
+      if response ~= nil then
+        -- Flag para evitar múltiples callbacks
+        local callback_executed = false
+
+        local status, error_msg = pcall(function()
+          if not callback_executed then
+            callback_executed = true
+            original_callback(response)
+          else
+            log.debug("Callback ya ejecutado previamente, ignorando llamada adicional")
+          end
+        end)
+
+        if not status then
+          log.error("Error en callback de CopilotChat: " .. tostring(error_msg))
+          -- NO intentamos llamar de nuevo con nil para evitar ciclos
+        end
+      else
+        log.error("Ignorando callback con respuesta nil para evitar ciclos")
+      end
     end
 
     -- Call the original callback if provided
@@ -94,26 +156,39 @@ function M.ask(message, opts)
   -- Try to use CopilotChat API
   local ok, CopilotChat = pcall(require, "CopilotChat")
 
-  if ok and CopilotChat and type(CopilotChat.ask) == "function" then
-    log.debug({
-      english = "Using CopilotChat API",
-      spanish = "Usando API de CopilotChat"
-    })
+  if ok and CopilotChat then
+    -- No mostrar mensajes de debug sobre CopilotChat cargado
 
-    local success, err = pcall(function()
-      CopilotChat.ask(message, opts)
-    end)
+    -- Verificar que CopilotChat.ask sea una función
+    if type(CopilotChat.ask) == "function" then
+      -- No mostrar mensajes de debug sobre CopilotChat.ask
 
-    if not success then
-      log.error("Error calling CopilotChat.ask: " .. tostring(err))
+      local success, err = pcall(function()
+        -- No mostrar mensajes de debug sobre intentar llamar a CopilotChat.ask
 
-      -- Fallback: Use command directly
-      log.warn("Falling back to CopilotChat command")
+        -- IMPORTANTE: No envolver el callback nuevamente, ya está envuelto en las líneas 101-130
+        -- Esto evita dobles llamadas y problemas con respuestas nulas
+        -- Solo registrar evento de diagnóstico
+        log.debug("Enviando solicitud a CopilotChat con callback único")
+
+        CopilotChat.ask(message, opts)
+      end)
+
+      if not success then
+        log.error("Error al llamar a CopilotChat.ask: " .. tostring(err))
+        -- Solo registrar en log
+        -- Plan B: Usar el comando directamente
+        vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
+      end
+    else
+      log.error("CopilotChat.ask no es una función: " .. type(CopilotChat.ask))
+      -- Solo registrar en log
+      -- Plan B: Usar el comando directamente
       vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
     end
   else
-    -- Fallback if API not available
-    log.warn("CopilotChat API not available, using command")
+    log.error("No se pudo cargar CopilotChat: " .. tostring(CopilotChat))
+    -- Solo registrar en log
     vim.cmd("CopilotChat " .. vim.fn.shellescape(message))
   end
 end
@@ -125,6 +200,15 @@ function M.open(context, opts)
     opts.system_prompt = require("copilotchatassist.prompts.system").default
   end
 
+  -- Establecer la opción headless por defecto en true para ocultar la ventana
+  if opts.headless == nil then
+    opts.headless = true
+  end
+
+  -- Registrar la solicitud sin usar el módulo log
+  -- Mensaje debug silenciado para evitar error
+  -- vim.notify("Opening CopilotChat with context", vim.log.levels.DEBUG)
+
   local ok, CopilotChat = pcall(require, "CopilotChat")
   if ok and CopilotChat and type(CopilotChat.open) == "function" then
     local success = pcall(function()
@@ -132,7 +216,7 @@ function M.open(context, opts)
     end)
 
     if not success then
-      log.warn("Error opening CopilotChat with context, using command")
+      -- Solo registrar en log
       vim.cmd("CopilotChat " .. vim.fn.shellescape(context))
     end
   else
@@ -218,7 +302,7 @@ end
 -- Process content to extract patches
 function M.process_for_patches(content)
   if not content or type(content) ~= "string" then
-    log.debug("Invalid content for patch processing")
+    -- No mostrar mensaje de debug sobre contenido inválido
     return 0
   end
 
