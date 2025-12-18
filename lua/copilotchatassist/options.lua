@@ -53,7 +53,7 @@ function M.get()
 end
 
 function M.get_copilotchat_config()
-  return {
+  local config = {
     model = M.model,
     temperature = M.temperature,       -- Lower = focused, higher = creative
     system_prompt = require("copilotchatassist.prompts.system").default,
@@ -67,6 +67,23 @@ function M.get_copilotchat_config()
       zindex = 100,
     },
   }
+
+  -- Pasar el contexto almacenado globalmente como prompt inicial si está disponible
+  if vim.g.copilotchatassist_context then
+    -- Agregar callback para inicializar con el contexto
+    config.init = function(chat)
+      -- Esperar un tick para asegurar que CopilotChat esté completamente inicializado
+      vim.defer_fn(function()
+        local CopilotChat = require("CopilotChat")
+        if CopilotChat and CopilotChat.ask then
+          -- Usar el contexto almacenado
+          CopilotChat.ask(vim.g.copilotchatassist_context)
+        end
+      end, 100)
+    end
+  end
+
+  return config
 end
 
 return M

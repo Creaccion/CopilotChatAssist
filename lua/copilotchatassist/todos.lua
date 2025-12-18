@@ -593,8 +593,8 @@ function M.show_task_details(task)
   for i = 1, 3 do
     local shortcut_line_idx = #lines - 5 + i
     local line = lines[shortcut_line_idx]
-    local open_bracket = line:find("[")
-    local close_bracket = line:find("]")
+    local open_bracket = line:find("%[", 1, true)
+    local close_bracket = line:find("%]", 1, true)
     if open_bracket and close_bracket then
       api.nvim_buf_add_highlight(popup_buf, ns_id, "Special", shortcut_line_idx - 1, open_bracket, close_bracket + 1)
     end
@@ -1368,7 +1368,7 @@ function M.generate_todo(callback)
       -- Detectar idioma actual del contenido con más patrones
       if content and (content:match("integración") or content:match("validación") or
          content:match("documentación") or content:match("PENDIENTE") or content:match("Total Tareas") or
-         content:match("pendientes") or content:match("listas") or content:match("%% avance") or
+         content:match("pendientes") or content:match("listas") or content:match("%%[ ]avance") or
          content:match("refactor") or content:match("implementar") or content:match("revisar")) then
         current_language = "spanish"
         log.debug({
