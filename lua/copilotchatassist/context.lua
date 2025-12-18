@@ -252,8 +252,19 @@ function M.copilot_tickets()
       local full_context = table.concat(context_parts, "\n\n")
       local i18n = require("copilotchatassist.i18n")
       local notify = require("copilotchatassist.utils.notify")
-      notify.info(i18n.t("context.context_loaded_combined"))
-      copilot_api.ask(full_context)
+
+      -- Usar el manejador de contexto para guardar y aplicar el contexto
+      local context_handler = require("copilotchatassist.utils.context_handler")
+      context_handler.store_context(full_context)
+
+      -- Intentar aplicar inmediatamente si CopilotChat está disponible
+      if context_handler.apply_context_to_chat() then
+        notify.info(i18n.t("context.context_loaded_combined"))
+      else
+        -- Fallback al método anterior si CopilotChat no está disponible
+        notify.info(i18n.t("context.context_loaded_combined"))
+        copilot_api.ask(full_context)
+      end
       return
     end
 

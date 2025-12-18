@@ -157,6 +157,7 @@ local function register_visualization_commands()
   })
 end
 
+local function register_code_review_commands()
   -- Comandos para Code Review
   vim.api.nvim_create_user_command("CopilotCodeReview", function()
     require("copilotchatassist.code_review").start_review()
@@ -195,7 +196,9 @@ end
   end, {
     desc = "Reiniciar/limpiar la revisión de código actual"
   })
+end
 
+local function register_patches_commands()
   -- Comandos para patches (migrados desde CopilotFiles)
   vim.api.nvim_create_user_command("CopilotPatchesWindow", function()
     require("copilotchatassist.patches").show_patch_window()
@@ -228,6 +231,7 @@ end
   })
 end
 
+local function register_log_commands()
   -- Comando para configurar nivel de log
   vim.api.nvim_create_user_command("CopilotLog", function(opts)
     local log_level = string.upper(opts.args)
@@ -287,6 +291,17 @@ function M.setup(opts)
   end
 
   -- Register commands immediately
+  local function create_commands()
+    register_context_commands()
+    register_todo_commands()
+    register_pr_commands()
+    register_documentation_commands()
+    register_visualization_commands()
+    register_code_review_commands()
+    register_patches_commands()
+    register_log_commands()
+  end
+
   create_commands()
 
   -- Load debug commands
@@ -305,6 +320,12 @@ function M.setup(opts)
   pcall(function()
     local progress = require("copilotchatassist.utils.progress")
     progress.setup()
+  end)
+
+  -- Inicializar sistema de manejo de contexto para CopilotChat
+  pcall(function()
+    local context_handler = require("copilotchatassist.utils.context_handler")
+    context_handler.setup()
   end)
 
   -- Respetar la configuración de log_level en lugar de forzar modo debug

@@ -19,15 +19,36 @@ M.supported_languages = {
   spanish = true
 }
 
--- Obtiene la descripción del PR actual desde GitHub usando gh CLI
-local function get_pr_description()
-  local handle = io.popen('gh pr view --json body --jq .body 2>/dev/null')
-  local desc = handle:read("*a")
-  handle:close()
-  if desc == "" or desc:match("not found") then
-    return nil
-  end
-  return desc
+-- Obtiene la descripción del PR actual desde GitHub usando gh CLI de manera asíncrona
+local function get_pr_description(callback)
+  -- Notificar inicio sin bloquear
+  log.debug("Obteniendo descripción del PR de forma asíncrona...")
+
+  local command = 'gh pr view --json body --jq .body 2>/dev/null'
+
+  -- Usar jobstart para operación asíncrona
+  vim.fn.jobstart(command, {
+    on_stdout = function(_, data, _)
+      -- Combinar todas las líneas de salida
+      local desc = table.concat(data, "\n")
+      if desc == "" or desc:match("not found") then
+        log.debug("No se encontró descripción de PR o PR no existe")
+        callback(nil)
+      else
+        log.debug("Descripción del PR obtenida correctamente, longitud: " .. #desc .. " bytes")
+        callback(desc)
+      end
+    end,
+    on_stderr = function(_, data, _)
+      local error_msg = table.concat(data, "\n")
+      if error_msg and error_msg ~= "" then
+        log.debug("Error obteniendo descripción del PR: " .. error_msg)
+      end
+      callback(nil)
+    end,
+    stdout_buffered = true,
+    stderr_buffered = true
+  })
 end
 
 -- Obtiene el nombre de la rama por defecto
@@ -42,28 +63,88 @@ local function get_default_branch()
   return branch
 end
 
--- Obtiene los cambios entre la rama actual y la rama base (limitando el tamaño para evitar problemas)
-local function get_diff()
-  local default_branch = get_default_branch()
-  local cmd = string.format("git diff origin/%s...HEAD", default_branch)
-  local handle = io.popen(cmd)
-  local diff = handle:read("*a")
-  handle:close()
-
-  -- Limitar el tamaño del diff para evitar problemas con CopilotChat
-  local max_diff_size = 10000 -- caracteres
-  if diff and #diff > max_diff_size then
-    log.info(string.format("Truncando diff de %d caracteres a %d caracteres", #diff, max_diff_size))
-    diff = diff:sub(1, max_diff_size) .. "\n\n... [diff truncado debido a su tamaño] ...\n"
+-- Obtiene los cambios entre la rama actual y la rama base de forma asíncrona
+local function get_diff(callback)
+  -- Asegurar que callback es una función válida
+  if type(callback) ~= "function" then
+    log.debug("get_diff llamado sin callback válido, usando función dummy")
+    callback = function(_) end
   end
 
-  return diff
+  local default_branch = get_default_branch()
+  local cmd = string.format("git diff origin/%s...HEAD", default_branch)
+
+  log.debug("Obteniendo diff de forma asíncrona...")
+
+  -- Usar jobstart para operación asíncrona
+  vim.fn.jobstart(cmd, {
+    on_stdout = function(_, data, _)
+      local diff = table.concat(data, "\n")
+
+      -- Limitar el tamaño del diff para evitar problemas con CopilotChat
+      local max_diff_size = 5000 -- caracteres - reducido para mayor confiabilidad
+      if diff and #diff > max_diff_size then
+        log.info(string.format("Truncando diff de %d caracteres a %d caracteres", #diff, max_diff_size))
+
+        -- Procesar el diff para mantener solo las secciones más importantes
+        local header_lines = {}
+        local most_important_changes = {}
+        local lines = {}
+
+        for line in diff:gmatch("[^\n]+") do
+          table.insert(lines, line)
+        end
+
+        -- Extraer encabezados de archivos para mantener contexto
+        for i, line in ipairs(lines) do
+          if line:match("^diff %-%-%git") or line:match("^%+%+%+") or line:match("^%-%-%-") then
+            table.insert(header_lines, line)
+          end
+        end
+
+        -- Extraer cambios principales (solo líneas con + o -)
+        for i, line in ipairs(lines) do
+          if line:match("^%+[^%+]") or line:match("^%-[^%-]") then
+            table.insert(most_important_changes, line)
+            if #most_important_changes >= 50 then  -- Limitar cantidad de líneas
+              break
+            end
+          end
+        end
+
+        -- Crear un diff resumido
+        local summarized_diff = table.concat(header_lines, "\n") .. "\n\n" ..
+                               table.concat(most_important_changes, "\n") ..
+                               "\n\n... [diff truncado debido a su tamaño] ...\n"
+
+        -- Usar el diff resumido si es más pequeño que el truncado simple
+        if #summarized_diff < max_diff_size then
+          diff = summarized_diff
+        else
+          diff = diff:sub(1, max_diff_size) .. "\n\n... [diff truncado debido a su tamaño] ...\n"
+        end
+      end
+
+      log.debug("Diff obtenido correctamente, longitud: " .. #diff .. " bytes")
+      callback(diff)
+    end,
+    on_stderr = function(_, data, _)
+      local error_msg = table.concat(data, "\n")
+      if error_msg and error_msg ~= "" then
+        log.debug("Error obteniendo diff: " .. error_msg)
+        callback("")
+      end
+    end,
+    stdout_buffered = true,
+    stderr_buffered = true
+  })
 end
 
--- Actualiza la descripción del PR
-local function update_pr_description(new_desc)
+-- Actualiza la descripción del PR de forma asíncrona
+local function update_pr_description(new_desc, callback)
+  callback = callback or function() end
   -- Imprimir detalles de depuración
-  log.debug("Actualizando descripción del PR")
+  log.debug("Actualizando descripción del PR asíncronamente")
 
   -- Manejar diferentes tipos de respuesta (string o tabla con campo content)
   local desc_content = new_desc
@@ -77,17 +158,20 @@ local function update_pr_description(new_desc)
     else
       log.error("La descripción es una tabla pero no tiene un campo content válido")
       log.debug("Estructura de la tabla: " .. vim.inspect(new_desc))
-      return false
+      callback(false)
+      return
     end
   elseif type(new_desc) ~= "string" then
     log.error("La descripción no es ni string ni tabla: " .. type(new_desc))
-    return false
+    callback(false)
+    return
   end
 
   -- Verificar que tenemos un string válido
   if not desc_content or desc_content == "" then
     log.error("Contenido de descripción vacío o inválido")
-    return false
+    callback(false)
+    return
   end
 
   -- Limitar el tamaño de la descripción para evitar problemas con GitHub
@@ -105,89 +189,102 @@ local function update_pr_description(new_desc)
   local tmpfile = os.tmpname()
   log.debug("Usando archivo temporal: " .. tmpfile)
 
-  -- Escribir contenido con manejo de errores
-  local f, err = io.open(tmpfile, "w")
-  if not f then
-    log.error("Error al abrir el archivo temporal: " .. tostring(err))
-    return false
-  end
+  -- Procesar de forma asíncrona para evitar bloqueos de UI
+  vim.schedule(function()
+    -- Escribir contenido con manejo de errores
+    local f, err = io.open(tmpfile, "w")
+    if not f then
+      log.error("Error al abrir el archivo temporal: " .. tostring(err))
+      callback(false)
+      return
+    end
 
-  -- Guardar el contenido para depuración
-  local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
-  vim.fn.mkdir(debug_dir, "p")
-  local debug_file = debug_dir .. "/pr_description_content.txt"
-  local df = io.open(debug_file, "w")
-  if df then
-    df:write(desc_content)
-    df:close()
-    log.debug("Contenido de descripción guardado en " .. debug_file)
-  end
+    -- Guardar el contenido para depuración
+    local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+    vim.fn.mkdir(debug_dir, "p")
+    local debug_file = debug_dir .. "/pr_description_content.txt"
+    local df = io.open(debug_file, "w")
+    if df then
+      df:write(desc_content)
+      df:close()
+      log.debug("Contenido de descripción guardado en " .. debug_file)
+    end
 
-  local write_success, write_err = f:write(desc_content)
-  if not write_success then
-    log.error("Error al escribir en el archivo temporal: " .. tostring(write_err))
+    local write_success, write_err = f:write(desc_content)
+    if not write_success then
+      log.error("Error al escribir en el archivo temporal: " .. tostring(write_err))
+      f:close()
+      os.remove(tmpfile)
+      callback(false)
+      return
+    end
+
     f:close()
-    os.remove(tmpfile)
-    return false
-  end
 
-  f:close()
+    -- Ejecutar gh CLI de forma asíncrona
+    local cmd = string.format("gh pr edit --body-file '%s'", tmpfile)
+    log.debug("Ejecutando comando asíncrono: " .. cmd)
 
-  -- Update the PR using gh with better error handling
-  local cmd = string.format("gh pr edit --body-file '%s' 2>&1", tmpfile)
-  log.debug("Ejecutando comando: " .. cmd)
+    vim.fn.jobstart(cmd, {
+      on_exit = function(_, exitcode, _)
+        -- Limpiar archivo temporal
+        os.remove(tmpfile)
 
-  local handle, cmd_err = io.popen(cmd)
-  if not handle then
-    log.error("Error al ejecutar gh pr edit: " .. tostring(cmd_err))
-    os.remove(tmpfile)
-    return false
-  end
-
-  local result = handle:read("*a")
-  local close_status = handle:close()
-
-  -- Limpiar archivo temporal
-  os.remove(tmpfile)
-
-  -- Verificar resultado
-  if not close_status then
-    log.error("Error al actualizar la descripción del PR. Salida del comando:")
-    log.error(result)
-    return false
-  end
-
-  -- Registrar información más detallada para depuración
-  if result and result:match("No changes") then
-    log.info("GitHub reporta que no hubo cambios en la descripción del PR")
-    log.debug("Salida del comando: " .. result)
-    return true
-  elseif result and result:match("Updating pull request") then
-    log.info("PR description updated successfully")
-    log.debug("Salida del comando: " .. result)
-    return true
-  else
-    log.info("PR description parece haberse actualizado")
-    log.debug("Salida del comando: " .. result)
-    return true
-  end
+        -- Verificar resultado
+        if exitcode == 0 then
+          log.info("PR description updated successfully")
+          callback(true)
+        else
+          log.error("Error al actualizar la descripción del PR. Código de salida: " .. exitcode)
+          callback(false)
+        end
+      end,
+      on_stderr = function(_, data, _)
+        local err_msg = table.concat(data, "\n")
+        if err_msg and err_msg ~= "" then
+          -- Verificar si son mensajes informativos o de error
+          if err_msg:match("No changes") then
+            log.info("GitHub reporta que no hubo cambios en la descripción del PR")
+            -- Considerar esto como éxito
+            callback(true)
+          elseif err_msg:match("Updating pull request") then
+            log.info("PR description updating")
+            -- Éxito parcial, esperamos la confirmación final
+          else
+            log.error("Error de gh CLI: " .. err_msg)
+          end
+        end
+      end,
+      stdout_buffered = true,
+      stderr_buffered = true
+    })
+  end)
 end
 
 -- Genera un título para el PR basado en los cambios
 function M.generate_pr_title(callback)
-  local diff = get_diff()
-  if diff == "" then
-    log.debug("No se encontraron cambios para generar un título")
-    return
+  -- Importar options aquí para asegurar que está disponible
+  local options = require("copilotchatassist.options")
+
+  -- Si callback no es una función, crear una función dummy
+  if type(callback) ~= "function" then
+    callback = function(_) end
   end
 
-  -- Always use the configured language from options
-  local language = options.get().language
-  local title_prefix = i18n.t("pr.title_prefix")
+  get_diff(function(diff)
+    if not diff or diff == "" then
+      log.debug("No se encontraron cambios para generar un título")
+      callback(nil)
+      return
+    end
 
-  local prompt
-  if language == "spanish" then
-    prompt = string.format([[
+    -- Always use the configured language from options
+    local language = options.get().language
+    local title_prefix = i18n.t("pr.title_prefix")
+
+    local prompt
+    if language == "spanish" then
+      prompt = string.format([[
     Eres un asistente experto en crear títulos para Pull Requests.
     Genera un título conciso para un Pull Request basado en los cambios proporcionados.
     El título debe:
@@ -202,8 +299,8 @@ function M.generate_pr_title(callback)
     Cambios:
     %s
     ]], title_prefix, diff)
-  else
-    prompt = string.format([[
+    else
+      prompt = string.format([[
     You're an expert assistant in creating Pull Request titles.
     Generate a concise title for a Pull Request based on the provided changes.
     The title should:
@@ -218,46 +315,52 @@ function M.generate_pr_title(callback)
     Changes:
     %s
     ]], title_prefix, diff)
-  end
+    end
 
-  log.debug("Generating PR title with CopilotChat...")
-  copilot_api.ask(prompt, {
-    callback = function(response)
-      local title = response or ""
-      if title ~= "" then
-        log.debug("PR title generated.")
-        if callback then
+    log.debug("Generating PR title with CopilotChat...")
+    copilot_api.ask(prompt, {
+      callback = function(response)
+        local title = response or ""
+        if title ~= "" then
+          log.debug("PR title generated.")
           callback(title)
-        end
-      else
-        log.debug("Failed to generate PR title.")
-        if callback then
+        else
+          log.debug("Failed to generate PR title.")
           callback(nil)
         end
       end
-    end
-  })
+    })
+  end)
 end
 
 -- Genera una descripción para el PR basada en los cambios
 function M.generate_pr_description(callback)
-  local diff = get_diff()
-  if diff == "" then
-    log.debug("No se encontraron cambios para generar una descripción")
-    return
+  -- Importar options aquí para asegurar que está disponible
+  local options = require("copilotchatassist.options")
+
+  -- Si callback no es una función, crear una función dummy
+  if type(callback) ~= "function" then
+    callback = function(_) end
   end
 
-  -- Always use the configured language from options
-  local language = options.get().language
-  local summary_section = i18n.t("pr.summary_section")
-  local changes_section = i18n.t("pr.changes_section")
-  local test_section = i18n.t("pr.test_section")
-  local summary_bullet = i18n.t("pr.summary_bullet")
-  local test_todo = i18n.t("pr.test_todo")
+  get_diff(function(diff)
+    if not diff or diff == "" then
+      log.debug("No se encontraron cambios para generar una descripción")
+      callback(nil)
+      return
+    end
 
-  local prompt
-  if language == "spanish" then
-    prompt = string.format([[
+    -- Always use the configured language from options
+    local language = options.get().language
+    local summary_section = i18n.t("pr.summary_section")
+    local changes_section = i18n.t("pr.changes_section")
+    local test_section = i18n.t("pr.test_section")
+    local summary_bullet = i18n.t("pr.summary_bullet")
+    local test_todo = i18n.t("pr.test_todo")
+
+    local prompt
+    if language == "spanish" then
+      prompt = string.format([[
     Eres un asistente experto en documentación de Pull Requests.
     Genera una descripción completa y detallada para un Pull Request basada en los cambios proporcionados.
 
@@ -292,6 +395,8 @@ function M.generate_pr_description(callback)
        - Incluye comentarios explicativos dentro del diagrama
        - Mantén la complejidad manejable (máximo 15-20 nodos por diagrama)
        - Si es necesario, divide en múltiples diagramas más específicos
+       - IMPORTANTE: No uses palabras reservadas como 'end', 'subgraph', 'class', etc. como nombres de clases o IDs en el diagrama
+       - SIEMPRE usa nombres como 'final', 'complete', 'finished' en lugar de 'end' para los nodos finales
 
     5. Si encuentras partes incompletas o ambiguas en el código:
        - Señálalas claramente en la descripción
@@ -304,8 +409,8 @@ function M.generate_pr_description(callback)
     Cambios:
     %s
     ]], summary_section, summary_bullet, changes_section, test_section, test_todo, diff)
-  else
-    prompt = string.format([[
+    else
+      prompt = string.format([[
     You're an expert assistant in Pull Request documentation.
     Generate a comprehensive and detailed description for a Pull Request based on the provided changes.
 
@@ -340,6 +445,8 @@ function M.generate_pr_description(callback)
        - Include explanatory comments within the diagram
        - Keep complexity manageable (maximum 15-20 nodes per diagram)
        - If necessary, split into multiple more specific diagrams
+       - IMPORTANT: Do not use reserved words such as 'end', 'subgraph', 'class', etc. as class names or IDs in the diagram
+       - ALWAYS use names like 'final', 'complete', 'finished' instead of 'end' for final nodes
 
     5. If you find incomplete or ambiguous parts in the code:
        - Clearly mark them in the description
@@ -352,350 +459,427 @@ function M.generate_pr_description(callback)
     Changes:
     %s
     ]], summary_section, summary_bullet, changes_section, test_section, test_todo, diff)
-  end
+    end
 
-  log.debug("Generating PR description with CopilotChat...")
-  copilot_api.ask(prompt, {
-    callback = function(response)
-      local description = response or ""
-      if description ~= "" then
-        log.debug("PR description generated.")
-        -- Guardar el idioma actual de la descripción
-        M.state.pr_language = language
-        if callback then
-          callback(description)
+    log.debug("Generating PR description with CopilotChat...")
+
+    -- Añadir un timer de timeout para evitar bloqueos indefinidos
+    local timeout_timer = vim.loop.new_timer()
+    local timeout_occurred = false
+
+    timeout_timer:start(180000, 0, function()
+      if not timeout_occurred then
+        timeout_occurred = true
+        log.error("Timeout reached while waiting for PR description generation")
+        vim.schedule(function()
+          callback(nil)
+        end)
+      end
+
+      timeout_timer:stop()
+      timeout_timer:close()
+    end)
+
+    copilot_api.ask(prompt, {
+      timeout = 180000, -- 3 minutos de timeout para dar más tiempo
+      system_prompt = "You are a Pull Request documentation expert. Focus on providing clear, concise PR descriptions with valid Mermaid diagrams.",
+      callback = function(response)
+        -- Cancelar el timer de timeout ya que llegó la respuesta
+        if timeout_timer then
+          timeout_timer:stop()
+          timeout_timer:close()
         end
-      else
-        log.debug("Failed to generate PR description.")
-        if callback then
+
+        -- Si ya ocurrió un timeout, ignorar esta callback
+        if timeout_occurred then
+          log.debug("Response received after timeout, ignoring")
+          return
+        end
+
+        local description = response or ""
+
+        -- Log del tipo de respuesta recibida para diagnóstico
+        log.debug("PR description response type: " .. type(description))
+
+        if type(description) == "table" and description.content then
+          log.debug("Response is a table, extracting content field")
+          description = description.content
+        end
+
+        if description and description ~= "" then
+          log.info("PR description generated successfully (%d bytes)", #description)
+
+          -- Guardar el idioma actual de la descripción
+          M.state.pr_language = language
+
+          -- Guardar para debug
+          local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+          vim.fn.mkdir(debug_dir, "p")
+          local debug_file = debug_dir .. "/pr_description_generated.txt"
+          local f = io.open(debug_file, "w")
+          if f then
+            f:write(description)
+            f:close()
+            log.debug("Generated description saved to " .. debug_file)
+          end
+
+          callback(description)
+        else
+          log.error("Failed to generate PR description (empty response)")
           callback(nil)
         end
       end
-    end
-  })
+    })
+  end)
 end
 
--- Mejora una descripción de PR existente
+-- Mejora una descripción de PR existente de forma asíncrona
 function M.enhance_pr(opts)
   opts = opts or {}
-  local old_desc = get_pr_description()
+
+  -- Notificar al usuario que el proceso ha comenzado
+  notify.info("Comenzando la mejora de la descripción del PR. Esto puede tomar un momento...", {timeout = 3000})
 
   -- Obtener la configuración de idioma del usuario
   local options = require("copilotchatassist.options")
   local target_language = options.get().language
   log.debug("Idioma configurado en opciones: " .. target_language)
 
-  if not old_desc or old_desc == "" then
-    log.debug("No PR description found. Generating a new one...")
-    M.generate_pr_description(function(new_desc)
-      if new_desc then
-        update_pr_description(new_desc)
-        -- Command completion - show at INFO level
-        notify.success("PR description created.", {force = true})
-      end
-    end)
-    return
-  end
-
-  local diff = get_diff()
-  if diff == "" then
-    log.debug("No se encontraron cambios recientes para mejorar la descripción")
-    return
-  end
-
-  -- Detectar idioma de la descripción actual
-  local detected_language = i18n.detect_language(old_desc)
-
-  -- Mostrar información sobre la detección de idioma
-  log.info("Idioma detectado en la descripción del PR: " .. detected_language)
-  log.info("Idioma configurado para usar: " .. target_language)
-
   -- Crear identificador para notificación
   -- Utilizar el sistema de progreso visual para mostrar el avance
   local progress = require("copilotchatassist.utils.progress")
   local spinner_id = "enhance_pr"
-  progress.start_spinner(spinner_id, "Enhancing PR description", {
+  progress.start_spinner(spinner_id, "Obteniendo información del PR", {
     style = options.get().progress_indicator_style,
     position = "statusline"
   })
 
-  -- Mantener también log para debug
-  log.debug("Enhancing PR description with CopilotChat...")
+  -- Obtener la descripción del PR de forma asíncrona
+  get_pr_description(function(old_desc)
+    if not old_desc or old_desc == "" then
+      progress.update_spinner(spinner_id, "No se encontró descripción del PR. Generando una nueva...")
 
-  -- Configurar timeout con valor más alto para evitar problemas con PRs grandes
-  local timeout_timer = vim.loop.new_timer()
-  timeout_timer:start(300000, 0, vim.schedule_wrap(function()
-    -- Si llegamos aquí, la solicitud nunca completó
-    -- Detener el spinner
-    progress.stop_spinner(spinner_id, false)
-
-    log.warn("Timeout alcanzado. La operación tomó demasiado tiempo.")
-
-    -- Detener y cerrar timer
-    if timeout_timer then
-      timeout_timer:stop()
-      timeout_timer:close()
-    end
-  end)) -- 5 minutos de timeout para dar más tiempo a CopilotChat
-
-  -- Crear un prompt simplificado con límite de tamaño para evitar respuestas excesivamente largas
-  local prompt
-
-  if detected_language ~= target_language then
-    -- Si los idiomas son diferentes, incluir instrucciones de traducción
-    prompt = string.format([[
-    Eres un asistente experto en documentación y traducción de Pull Requests.
-
-    INSTRUCCIONES PRINCIPALES:
-    1. TRADUCE la descripción del PR del idioma %s al idioma %s.
-    2. MEJORA la descripción mientras la traduces, analizando los cambios recientes.
-    3. SE EXTREMADAMENTE CONCISO (máximo ~3000 caracteres).
-    4. ENFOCATE SOLO en la información más importante.
-
-    INSTRUCCIONES IMPORTANTES:
-    - Usa puntos para listas y sé breve en cada punto
-    - Evita detalles excesivos y explicaciones largas
-    - Resume detalles de implementación en vez de explicarlos por completo
-    - Devuelve SOLO la descripción final, sin comentarios ni texto adicional
-    - Evita cualquier texto redundante o innecesario
-
-    INSTRUCCIONES PARA DIAGRAMAS MERMAID:
-    - Incluye UN SOLO diagrama mermaid SOLO SI es absolutamente necesario
-    - Usa sintaxis simple y válida para evitar errores de parsing
-    - Evita caracteres especiales en los textos de los nodos
-    - Usa nombres cortos para los nodos (A, B, C...)
-    - Siempre escapa los corchetes dentro del texto con \[ y \]
-    - NO uses comillas dentro del texto de los nodos
-    - Asegura que cada nodo tiene un cierre correcto
-    - Si incluyes un nodo con caracteres especiales, usa comillas para todo el texto
-    - Ejemplo correcto: A[Enviar datos] --> B[Procesar respuesta]
-
-    Descripción actual (%s):
-    %s
-
-    Cambios recientes:
-    %s
-    ]],
-    detected_language, target_language, detected_language, old_desc, diff)
-  else
-    -- Si el idioma es el mismo, solo mejorar la descripción
-    if target_language == "spanish" then
-      prompt = string.format([[
-      Eres un asistente experto en documentación de Pull Requests.
-
-      INSTRUCCIONES PRINCIPALES:
-      1. MEJORA la descripción basándote en los cambios recientes.
-      2. SE EXTREMADAMENTE CONCISO (máximo ~3000 caracteres).
-      3. ENFOCATE SOLO en la información más importante.
-
-      INSTRUCCIONES IMPORTANTES:
-      - Usa puntos para listas y sé breve en cada punto
-      - Evita detalles excesivos y explicaciones largas
-      - Resume detalles de implementación en vez de explicarlos por completo
-      - Devuelve SOLO la descripción final, sin comentarios ni texto adicional
-      - Evita cualquier texto redundante o innecesario
-
-      INSTRUCCIONES PARA DIAGRAMAS MERMAID:
-      - Incluye UN SOLO diagrama mermaid SOLO SI es absolutamente necesario
-      - Usa sintaxis simple y válida para evitar errores de parsing
-      - Evita caracteres especiales en los textos de los nodos
-      - Usa nombres cortos para los nodos (A, B, C...)
-      - Siempre escapa los corchetes dentro del texto con \[ y \]
-      - NO uses comillas dentro del texto de los nodos
-      - Asegura que cada nodo tiene un cierre correcto
-      - Si incluyes un nodo con caracteres especiales, usa comillas para todo el texto
-
-      Descripción actual:
-      %s
-
-      Cambios recientes:
-      %s
-      ]], old_desc, diff)
-    else
-      prompt = string.format([[
-      You're an expert assistant in Pull Request documentation.
-
-      MAIN INSTRUCTIONS:
-      1. IMPROVE the description based on recent changes.
-      2. BE EXTREMELY CONCISE (maximum ~3000 characters).
-      3. FOCUS ONLY on the most important information.
-
-      IMPORTANT GUIDELINES:
-      - Use bullet points for lists and be brief with each point
-      - Avoid excessive details and lengthy explanations
-      - Summarize implementation details rather than explaining them fully
-      - Return ONLY the final description, no comments or additional text
-      - Avoid any redundant or unnecessary text
-
-      MERMAID DIAGRAM GUIDELINES:
-      - Include ONLY ONE small mermaid diagram IF absolutely necessary
-      - Use simple and valid syntax to avoid parsing errors
-      - Avoid special characters in node text
-      - Use short node names (A, B, C...)
-      - Always escape brackets in text with \[ and \]
-      - DO NOT use quotes inside node text
-      - Ensure each node has proper closure
-      - If node includes special characters, use quotes for the entire text
-
-      Current description:
-      %s
-
-      Recent changes:
-      %s
-      ]], old_desc, diff)
-    end
-  end
-
-  -- Modificar el prompt para reducir complejidad y hacer más directa la solicitud
-  local simplified_prompt
-
-  if detected_language ~= target_language then
-    simplified_prompt = string.format([[
-    Translate and enhance this Pull Request description from %s to %s.
-    The PR description should be well-formatted, clear, and contain all relevant information.
-    Include or improve mermaid diagrams where appropriate.
-    Return ONLY the final description, no comments or extra text.
-
-    Current PR description (%s):
-    %s
-
-    Recent changes:
-    %s
-    ]], detected_language, target_language, detected_language, old_desc, diff)
-  else
-    simplified_prompt = string.format([[
-    Enhance this Pull Request description (keeping it in %s).
-    The PR description should be well-formatted, clear, and contain all relevant information.
-    Include or improve mermaid diagrams where appropriate.
-    Return ONLY the final description, no comments or extra text.
-
-    Current PR description:
-    %s
-
-    Recent changes:
-    %s
-    ]], target_language, old_desc, diff)
-  end
-
-  -- Enviar solicitud asíncrona a CopilotChat con prompt más sencillo
-  copilot_api.ask(simplified_prompt, {
-    system_prompt = "You are an expert in documentation and translation focused on Pull Request descriptions. You provide clear, concise, and accurate descriptions with diagrams when helpful. For Mermaid diagrams, you use extremely simple and valid syntax to avoid parsing errors. You never use parentheses or special characters in node text. You use short node names like A, B, C with simple text descriptions.",
-    callback = function(response)
-      -- Detener el spinner con resultado exitoso si hay respuesta
-      local success = response ~= nil
-      progress.stop_spinner(spinner_id, success)
-
-      -- Cancelar timeout timer
-      if timeout_timer then
-        timeout_timer:stop()
-        timeout_timer:close()
-      end
-
-      log.debug("Recibida respuesta para enhance_pr (tipo: " .. type(response) .. ")")
-
-      -- Extraer el contenido de la respuesta según su tipo
-      local new_desc
-      if type(response) == "string" then
-        new_desc = response
-      elseif type(response) == "table" and response.content then
-        log.debug("Respuesta es una tabla con campo content, extrayendo...")
-        new_desc = response.content
-      else
-        log.error("Formato de respuesta no reconocido")
-        if type(response) == "table" then
-          log.debug("Contenido de la tabla: " .. vim.inspect(response))
+      M.generate_pr_description(function(new_desc)
+        if new_desc then
+          update_pr_description(new_desc)
+          progress.stop_spinner(spinner_id, true)
+          notify.success("PR description created.", {force = true})
+        else
+          progress.stop_spinner(spinner_id, false)
+          notify.error("No se pudo generar la descripción del PR", {force = true})
         end
-        log.error("Error: formato de respuesta no reconocido.")
+      end)
+      return
+    end
+
+    -- Actualizar mensaje del spinner
+    progress.update_spinner(spinner_id, "Obteniendo diff de cambios...")
+
+    -- Obtener el diff de forma asíncrona
+    get_diff(function(diff)
+      if diff == "" then
+        log.debug("No se encontraron cambios recientes para mejorar la descripción")
+        progress.stop_spinner(spinner_id, false)
+        notify.warn("No se encontraron cambios para mejorar la descripción del PR")
         return
       end
 
-      -- Verificar que la descripción no está vacía y es diferente
-      if new_desc and new_desc ~= "" and new_desc ~= old_desc then
-        log.debug("Nueva descripción recibida, longitud: " .. #new_desc)
+      -- Detectar idioma de la descripción actual
+      local detected_language = i18n.detect_language(old_desc)
 
-        -- Guardar la descripción para depuración
-        local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
-        vim.fn.mkdir(debug_dir, "p")
-        local debug_file = debug_dir .. "/new_pr_description.txt"
-        local f = io.open(debug_file, "w")
-        if f then
-          f:write(new_desc)
-          f:close()
-          log.debug("Nueva descripción guardada en " .. debug_file)
+      -- Mostrar información sobre la detección de idioma
+      log.info("Idioma detectado en la descripción del PR: " .. detected_language)
+      log.info("Idioma configurado para usar: " .. target_language)
+
+      -- Crear identificador para notificación
+      -- Utilizar el sistema de progreso visual para mostrar el avance
+      local progress = require("copilotchatassist.utils.progress")
+      local spinner_id = "enhance_pr"
+      progress.start_spinner(spinner_id, "Enhancing PR description", {
+        style = options.get().progress_indicator_style,
+        position = "statusline"
+      })
+
+      -- Mantener también log para debug
+      log.debug("Enhancing PR description with CopilotChat...")
+
+      -- Configurar timeout con valor más alto para evitar problemas con PRs grandes
+      local timeout_timer = vim.loop.new_timer()
+      timeout_timer:start(300000, 0, vim.schedule_wrap(function()
+        -- Si llegamos aquí, la solicitud nunca completó
+        -- Detener el spinner
+        progress.stop_spinner(spinner_id, false)
+
+        log.warn("Timeout alcanzado. La operación tomó demasiado tiempo.")
+
+        -- Detener y cerrar timer
+        if timeout_timer then
+          timeout_timer:stop()
+          timeout_timer:close()
         end
+      end)) -- 5 minutos de timeout para dar más tiempo a CopilotChat
 
-        -- Mostrar notificación de progreso
-        local action_msg = detected_language ~= target_language
-          and "Descripción traducida y mejorada. Actualizando PR..."
-          or "Descripción mejorada. Actualizando PR..."
+      -- Crear un prompt simplificado con límite de tamaño para evitar respuestas excesivamente largas
+      local prompt
 
-        -- Actualizar la notificación existente con un timeout
-        -- para asegurar que desaparezca si hay algún problema posterior
-        notify.info(action_msg, {
-          title = "PR Enhancement",
-          timeout = 10000,  -- 10 segundos de timeout por si acaso
-          replace = notify_id
-        })
+      if detected_language ~= target_language then
+        -- Si los idiomas son diferentes, incluir instrucciones de traducción
+        prompt = string.format([[
+        Eres un asistente experto en documentación y traducción de Pull Requests.
 
-        -- Almacenamos una referencia para usar como backup
-        local update_notify_id = notify_id
+        INSTRUCCIONES PRINCIPALES:
+        1. TRADUCE la descripción del PR del idioma %s al idioma %s.
+        2. MEJORA la descripción mientras la traduces, analizando los cambios recientes.
+        3. SE EXTREMADAMENTE CONCISO (máximo ~3000 caracteres).
+        4. ENFOCATE SOLO en la información más importante.
 
-        -- Actualizar la descripción inmediatamente
-        if update_pr_description(new_desc) then
-          local success_msg = detected_language ~= target_language
-            and string.format("PR description translated from %s to %s and enhanced successfully!", detected_language, target_language)
-            or "PR description enhanced successfully!"
+        INSTRUCCIONES IMPORTANTES:
+        - Usa puntos para listas y sé breve en cada punto
+        - Evita detalles excesivos y explicaciones largas
+        - Resume detalles de implementación en vez de explicarlos por completo
+        - Devuelve SOLO la descripción final, sin comentarios ni texto adicional
+        - Evita cualquier texto redundante o innecesario
 
-          -- Asegurar que la notificación se cierra después de mostrar el éxito
-          -- Utilizamos timeout corto para que desaparezca
-          -- En lugar de mostrar notificación, usar un spinner exitoso final
-        local final_spinner_id = "enhance_pr_completed"
-        progress.start_spinner(final_spinner_id, "PR enhancement completed", {
-          style = options.get().progress_indicator_style,
-          position = "statusline"
-        })
+        INSTRUCCIONES PARA DIAGRAMAS MERMAID:
+        - Incluye UN SOLO diagrama mermaid SOLO SI es absolutamente necesario
+        - Usa sintaxis simple y válida para evitar errores de parsing
+        - Evita caracteres especiales en los textos de los nodos
+        - Usa nombres cortos para los nodos (A, B, C...)
+        - Siempre escapa los corchetes dentro del texto con \[ y \]
+        - NO uses comillas dentro del texto de los nodos
+        - Asegura que cada nodo tiene un cierre correcto
+        - Si incluyes un nodo con caracteres especiales, usa comillas para todo el texto
+        - Ejemplo correcto: A[Enviar datos] --> B[Procesar respuesta]
 
-        -- Detener el spinner automáticamente después de 2 segundos
-        vim.defer_fn(function()
-          progress.stop_spinner(final_spinner_id, true)
-        end, 2000)
+        Descripción actual (%s):
+        %s
 
-          -- No need to clean up notifications anymore  -- 5.5 segundos, justo después de que la notificación de éxito desaparezca
-
-          -- Actualizar el estado del idioma si se realizó una traducción
-          if detected_language ~= target_language then
-            M.state.pr_language = target_language
-          end
-        else
-          -- Mostrar un spinner de error en lugar de notificación
-        local error_spinner_id = "pr_update_error"
-        progress.start_spinner(error_spinner_id, "Error updating PR description", {
-          style = options.get().progress_indicator_style,
-          position = "statusline"
-        })
-
-        -- Detener el spinner con estado de error
-        vim.defer_fn(function()
-          progress.stop_spinner(error_spinner_id, false)
-        end, 2000)
-        end
+        Cambios recientes:
+        %s
+        ]],
+        detected_language, target_language, detected_language, old_desc, diff)
       else
-        if not new_desc or new_desc == "" then
-          log.warn("La nueva descripción está vacía")
-          -- Convert to debug log
-          log.debug("Received empty PR description from CopilotChat.")
-          local empty_notify_id = nil
-        else
-          log.info("La nueva descripción es idéntica a la original")
-          -- Convert to debug log
-          log.debug("No significant improvements to make to PR description.")
-          local no_change_notify_id = nil
-        end
+        -- Si el idioma es el mismo, solo mejorar la descripción
+        if target_language == "spanish" then
+          prompt = string.format([[
+          Eres un asistente experto en documentación de Pull Requests.
 
-        -- No need to clean up since we're using debug logs instead of notifications
+          INSTRUCCIONES PRINCIPALES:
+          1. MEJORA la descripción basándote en los cambios recientes.
+          2. SE EXTREMADAMENTE CONCISO (máximo ~3000 caracteres).
+          3. ENFOCATE SOLO en la información más importante.
+
+          INSTRUCCIONES IMPORTANTES:
+          - Usa puntos para listas y sé breve en cada punto
+          - Evita detalles excesivos y explicaciones largas
+          - Resume detalles de implementación en vez de explicarlos por completo
+          - Devuelve SOLO la descripción final, sin comentarios ni texto adicional
+          - Evita cualquier texto redundante o innecesario
+
+          INSTRUCCIONES PARA DIAGRAMAS MERMAID:
+          - Incluye UN SOLO diagrama mermaid SOLO SI es absolutamente necesario
+          - Usa sintaxis simple y válida para evitar errores de parsing
+          - Evita caracteres especiales en los textos de los nodos
+          - Usa nombres cortos para los nodos (A, B, C...)
+          - Siempre escapa los corchetes dentro del texto con \[ y \]
+          - NO uses comillas dentro del texto de los nodos
+          - Asegura que cada nodo tiene un cierre correcto
+          - Si incluyes un nodo con caracteres especiales, usa comillas para todo el texto
+
+          Descripción actual:
+          %s
+
+          Cambios recientes:
+          %s
+          ]], old_desc, diff)
+        else
+          prompt = string.format([[
+          You're an expert assistant in Pull Request documentation.
+
+          MAIN INSTRUCTIONS:
+          1. IMPROVE the description based on recent changes.
+          2. BE EXTREMELY CONCISE (maximum ~3000 characters).
+          3. FOCUS ONLY on the most important information.
+
+          IMPORTANT GUIDELINES:
+          - Use bullet points for lists and be brief with each point
+          - Avoid excessive details and lengthy explanations
+          - Summarize implementation details rather than explaining them fully
+          - Return ONLY the final description, no comments or additional text
+          - Avoid any redundant or unnecessary text
+
+          MERMAID DIAGRAM GUIDELINES:
+          - Include ONLY ONE small mermaid diagram IF absolutely necessary
+          - Use simple and valid syntax to avoid parsing errors
+          - Avoid special characters in node text
+          - Use short node names (A, B, C...)
+          - Always escape brackets in text with \[ and \]
+          - DO NOT use quotes inside node text
+          - Ensure each node has proper closure
+          - If node includes special characters, use quotes for the entire text
+
+          Current description:
+          %s
+
+          Recent changes:
+          %s
+          ]], old_desc, diff)
+        end
       end
-    end
-  })
+
+      -- Modificar el prompt para reducir complejidad y hacer más directa la solicitud
+      local simplified_prompt
+
+      if detected_language ~= target_language then
+        simplified_prompt = string.format([[
+        Translate and enhance this Pull Request description from %s to %s.
+        The PR description should be well-formatted, clear, and contain all relevant information.
+        Include or improve mermaid diagrams where appropriate.
+        Return ONLY the final description, no comments or extra text.
+
+        Current PR description (%s):
+        %s
+
+        Recent changes:
+        %s
+        ]], detected_language, target_language, detected_language, old_desc, diff)
+      else
+        simplified_prompt = string.format([[
+        Enhance this Pull Request description (keeping it in %s).
+        The PR description should be well-formatted, clear, and contain all relevant information.
+        Include or improve mermaid diagrams where appropriate.
+        Return ONLY the final description, no comments or extra text.
+
+        Current PR description:
+        %s
+
+        Recent changes:
+        %s
+        ]], target_language, old_desc, diff)
+      end
+
+      -- Enviar solicitud asíncrona a CopilotChat con prompt más sencillo
+      copilot_api.ask(simplified_prompt, {
+        system_prompt = "You are an expert in documentation and translation focused on Pull Request descriptions. You provide clear, concise, and accurate descriptions with diagrams when helpful. For Mermaid diagrams, you use extremely simple and valid syntax to avoid parsing errors. You never use parentheses or special characters in node text. You use short node names like A, B, C with simple text descriptions. IMPORTANT: You never use reserved words like 'end', 'subgraph', 'class' as class names or IDs in Mermaid diagrams - instead use 'final', 'complete', or 'finished'.",
+        callback = function(response)
+          -- Detener el spinner con resultado exitoso si hay respuesta
+          local success = response ~= nil
+          progress.stop_spinner(spinner_id, success)
+
+          -- Cancelar timeout timer
+          if timeout_timer then
+            timeout_timer:stop()
+            timeout_timer:close()
+          end
+
+          log.debug("Recibida respuesta para enhance_pr (tipo: " .. type(response) .. ")")
+
+          -- Extraer el contenido de la respuesta según su tipo
+          local new_desc
+          if type(response) == "string" then
+            new_desc = response
+          elseif type(response) == "table" and response.content then
+            log.debug("Respuesta es una tabla con campo content, extrayendo...")
+            new_desc = response.content
+          else
+            log.error("Formato de respuesta no reconocido")
+            if type(response) == "table" then
+              log.debug("Contenido de la tabla: " .. vim.inspect(response))
+            end
+            log.error("Error: formato de respuesta no reconocido.")
+            return
+          end
+
+          -- Verificar que la descripción no está vacía y es diferente
+          if new_desc and new_desc ~= "" and new_desc ~= old_desc then
+            log.debug("Nueva descripción recibida, longitud: " .. #new_desc)
+
+            -- Guardar la descripción para depuración
+            local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+            vim.fn.mkdir(debug_dir, "p")
+            local debug_file = debug_dir .. "/new_pr_description.txt"
+            local f = io.open(debug_file, "w")
+            if f then
+              f:write(new_desc)
+              f:close()
+              log.debug("Nueva descripción guardada en " .. debug_file)
+            end
+
+            -- Mostrar notificación de progreso
+            local action_msg = detected_language ~= target_language
+              and "Descripción traducida y mejorada. Actualizando PR..."
+              or "Descripción mejorada. Actualizando PR..."
+
+            -- Actualizar la notificación existente con un timeout
+            -- para asegurar que desaparezca si hay algún problema posterior
+            notify.info(action_msg, {
+              title = "PR Enhancement",
+              timeout = 10000,  -- 10 segundos de timeout por si acaso
+              replace = nil
+            })
+
+            -- Ya no necesitamos almacenar una referencia
+
+            -- Actualizar la descripción inmediatamente
+            update_pr_description(new_desc, function(success)
+              if success then
+                local success_msg = detected_language ~= target_language
+                  and string.format("PR description translated from %s to %s and enhanced successfully!", detected_language, target_language)
+                  or "PR description enhanced successfully!"
+
+                -- Asegurar que la notificación se cierra después de mostrar el éxito
+                -- Utilizamos timeout corto para que desaparezca
+                -- En lugar de mostrar notificación, usar un spinner exitoso final
+                local final_spinner_id = "enhance_pr_completed"
+                progress.start_spinner(final_spinner_id, "PR enhancement completed", {
+                  style = options.get().progress_indicator_style,
+                  position = "statusline"
+                })
+
+                -- Detener el spinner automáticamente después de 2 segundos
+                vim.defer_fn(function()
+                  progress.stop_spinner(final_spinner_id, true)
+                end, 2000)
+
+                -- No need to clean up notifications anymore  -- 5.5 segundos, justo después de que la notificación de éxito desaparezca
+
+                -- Actualizar el estado del idioma si se realizó una traducción
+                if detected_language ~= target_language then
+                  M.state.pr_language = target_language
+                end
+              else
+                -- Mostrar un spinner de error en lugar de notificación
+                local error_spinner_id = "pr_update_error"
+                progress.start_spinner(error_spinner_id, "Error updating PR description", {
+                  style = options.get().progress_indicator_style,
+                  position = "statusline"
+                })
+
+                -- Detener el spinner con estado de error
+                vim.defer_fn(function()
+                  progress.stop_spinner(error_spinner_id, false)
+                end, 2000)
+              end
+            end)
+          else
+            if not new_desc or new_desc == "" then
+              log.warn("La nueva descripción está vacía")
+              -- Convert to debug log
+              log.debug("Received empty PR description from CopilotChat.")
+              -- No notification needed
+            else
+              log.info("La nueva descripción es idéntica a la original")
+              -- Convert to debug log
+              log.debug("No significant improvements to make to PR description.")
+              -- No notification needed
+            end
+
+            -- No need to clean up since we're using debug logs instead of notifications
+          end
+        end
+      })
+    end)
+  end)
 end
 
 -- Función principal para cambiar el idioma de la descripción del PR
@@ -835,6 +1019,9 @@ end
 -- Función simplificada que usa directamente CopilotChat para cambiar el idioma de un PR
 -- @param target_language string: Idioma de destino para la descripción del PR
 function M.simple_change_pr_language(target_language)
+  -- Importar options
+  local options = require("copilotchatassist.options")
+
   -- Validar idioma solicitado
   if not M.supported_languages[target_language] then
     log.error("Idioma no soportado: " .. target_language)
@@ -842,147 +1029,149 @@ function M.simple_change_pr_language(target_language)
     return
   end
 
-  -- Obtener la descripción actual del PR
-  local old_desc = get_pr_description()
-  if not old_desc or old_desc == "" then
-    log.warn("No se encontró descripción del PR para traducir")
-    notify.warn("No se encontró descripción del PR para traducir")
-    return
-  end
-
-  -- Detectar idioma actual
-  local current_detected_language = i18n.detect_language(old_desc)
-
-  -- Verificar si ya está en el idioma destino
-  if current_detected_language == target_language then
-    log.info("La descripción ya está en el idioma solicitado: " .. target_language)
-    notify.info("La descripción del PR ya está en " .. target_language)
-    return
-  end
-
-  -- Utilizar el sistema de progreso visual centralizado
-  local progress = require("copilotchatassist.utils.progress")
-  local spinner_id = "change_pr_language"
-
-  -- Iniciar spinner con mensaje en el idioma apropiado
-  local message = "Translating PR from " .. current_detected_language .. " to " .. target_language
-  if target_language == "spanish" then
-    message = "Traduciendo PR de " .. current_detected_language .. " a " .. target_language
-  end
-
-  -- Iniciar spinner
-  progress.start_spinner(spinner_id, message, {
-    style = options.get().progress_indicator_style,
-    position = "statusline"
-  })
-
-  -- Crear un prompt que le pida a CopilotChat traducir y actualizar en un solo paso
-  local prompt = string.format([[
-  Eres un asistente experto en traducción y documentación. Por favor traduce la siguiente
-  descripción de Pull Request del idioma %s a %s, manteniendo el formato y estructura.
-
-  IMPORTANTE: Debes devolver SÓLO el texto traducido listo para ser utilizado,
-  sin ningún comentario adicional, explicación o formato markdown extra.
-
-  SIEMPRE traduce los diagramas mermaid conservando su estructura y parámetros de estilo.
-  SIEMPRE mantén intactos los nombres de código, variables y términos técnicos.
-  SIEMPRE preserva el formato y la estructura del texto original.
-
-  Descripción a traducir:
-
-  %s
-  ]], current_detected_language, target_language, old_desc)
-
-  -- Enviar solicitud a CopilotChat
-  copilot_api.ask(prompt, {
-    system_prompt = "You are a translation expert focusing on technical documentation with precise formatting preservation.",
-    callback = function(response)
-      -- Detener el spinner del sistema de progreso
-      local success = response ~= nil
-      progress.stop_spinner(spinner_id, success)
-
-      -- Procesar la respuesta
-      local new_desc
-      if type(response) == "string" then
-        new_desc = response
-      elseif type(response) == "table" and response.content then
-        new_desc = response.content
-      else
-        log.error("Formato de respuesta no reconocido")
-        notify.error("Error: formato de respuesta no reconocido", {
-                    title = "PR Translation",
-                    timeout = 5000,
-                    replace = notify_id
-                  })
-        return
-      end
-
-      -- Verificar que obtuvimos una respuesta válida
-      if not new_desc or new_desc == "" then
-        log.error("La traducción devolvió un resultado vacío")
-        notify.error("Error: traducción vacía", {
-                    title = "PR Translation",
-                    timeout = 5000,
-                    replace = notify_id
-                  })
-        return
-      end
-
-      -- Guardar para debug
-      local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
-      vim.fn.mkdir(debug_dir, "p")
-      local debug_file = debug_dir .. "/simple_pr_translation.md"
-      local f = io.open(debug_file, "w")
-      if f then
-        f:write(new_desc)
-        f:close()
-        log.debug("Traducción guardada en " .. debug_file)
-      end
-
-      -- Actualizar el spinner en lugar de mostrar notificación
-      progress.update_spinner(spinner_id, "Traducción completada. Actualizando PR...")
-
-      -- Actualizar la descripción del PR
-      local success = update_pr_description(new_desc)
-
-      if success then
-        log.info("PR actualizado correctamente a " .. target_language)
-
-        -- En lugar de notificación, mostrar un spinner final con éxito
-        local final_spinner_id = "translation_completed"
-        progress.start_spinner(final_spinner_id, "PR translation completed", {
-          style = options.get().progress_indicator_style,
-          position = "statusline"
-        })
-
-        -- Detener el spinner automáticamente después de 2 segundos
-        vim.defer_fn(function()
-          progress.stop_spinner(final_spinner_id, true)
-        end, 2000)
-
-        -- Actualizar el idioma registrado
-        M.state.pr_language = target_language
-      else
-        log.error("Error al actualizar la descripción del PR")
-
-        -- Mostrar un spinner de error en lugar de notificación
-        local error_spinner_id = "translation_error"
-        progress.start_spinner(error_spinner_id, "Error updating PR description", {
-          style = options.get().progress_indicator_style,
-          position = "statusline"
-        })
-
-        -- Detener el spinner con estado de error
-        vim.defer_fn(function()
-          progress.stop_spinner(error_spinner_id, false)
-        end, 2000)
-      end
+  -- Obtener la descripción actual del PR de forma asíncrona
+  get_pr_description(function(old_desc)
+    if not old_desc or old_desc == "" then
+      log.warn("No se encontró descripción del PR para traducir")
+      notify.warn("No se encontró descripción del PR para traducir")
+      return
     end
-  })
+
+    -- Detectar idioma actual
+    local current_detected_language = i18n.detect_language(old_desc)
+
+    -- Verificar si ya está en el idioma destino
+    if current_detected_language == target_language then
+      log.info("La descripción ya está en el idioma solicitado: " .. target_language)
+      notify.info("La descripción del PR ya está en " .. target_language)
+      return
+    end
+
+    -- Utilizar el sistema de progreso visual centralizado
+    local progress = require("copilotchatassist.utils.progress")
+    local spinner_id = "change_pr_language"
+
+    -- Iniciar spinner con mensaje en el idioma apropiado
+    local message = "Translating PR from " .. current_detected_language .. " to " .. target_language
+    if target_language == "spanish" then
+      message = "Traduciendo PR de " .. current_detected_language .. " a " .. target_language
+    end
+
+    -- Iniciar spinner
+    progress.start_spinner(spinner_id, message, {
+      style = options.get().progress_indicator_style,
+      position = "statusline"
+    })
+
+    -- Crear un prompt que le pida a CopilotChat traducir y actualizar en un solo paso
+    local prompt = string.format([[
+    Eres un asistente experto en traducción y documentación. Por favor traduce la siguiente
+    descripción de Pull Request del idioma %s a %s, manteniendo el formato y estructura.
+
+    IMPORTANTE: Debes devolver SÓLO el texto traducido listo para ser utilizado,
+    sin ningún comentario adicional, explicación o formato markdown extra.
+
+    SIEMPRE traduce los diagramas mermaid conservando su estructura y parámetros de estilo.
+    SIEMPRE mantén intactos los nombres de código, variables y términos técnicos.
+    SIEMPRE preserva el formato y la estructura del texto original.
+
+    Descripción a traducir:
+
+    %s
+    ]], current_detected_language, target_language, old_desc)
+
+    -- Enviar solicitud a CopilotChat
+    copilot_api.ask(prompt, {
+      system_prompt = "You are a translation expert focusing on technical documentation with precise formatting preservation.",
+      callback = function(response)
+        -- Detener el spinner del sistema de progreso
+        local success = response ~= nil
+        progress.stop_spinner(spinner_id, success)
+
+        -- Procesar la respuesta
+        local new_desc
+        if type(response) == "string" then
+          new_desc = response
+        elseif type(response) == "table" and response.content then
+          new_desc = response.content
+        else
+          log.error("Formato de respuesta no reconocido")
+          notify.error("Error: formato de respuesta no reconocido", {
+                      title = "PR Translation",
+                      timeout = 5000,
+                      replace = nil
+                    })
+          return
+        end
+
+        -- Verificar que obtuvimos una respuesta válida
+        if not new_desc or new_desc == "" then
+          log.error("La traducción devolvió un resultado vacío")
+          notify.error("Error: traducción vacía", {
+                      title = "PR Translation",
+                      timeout = 5000,
+                      replace = nil
+                    })
+          return
+        end
+
+        -- Guardar para debug
+        local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+        vim.fn.mkdir(debug_dir, "p")
+        local debug_file = debug_dir .. "/simple_pr_translation.md"
+        local f = io.open(debug_file, "w")
+        if f then
+          f:write(new_desc)
+          f:close()
+          log.debug("Traducción guardada en " .. debug_file)
+        end
+
+        -- Actualizar el spinner en lugar de mostrar notificación
+        progress.update_spinner(spinner_id, "Traducción completada. Actualizando PR...")
+
+        -- Actualizar la descripción del PR
+        update_pr_description(new_desc, function(success)
+          if success then
+            log.info("PR actualizado correctamente a " .. target_language)
+
+            -- En lugar de notificación, mostrar un spinner final con éxito
+            local final_spinner_id = "translation_completed"
+            progress.start_spinner(final_spinner_id, "PR translation completed", {
+              style = options.get().progress_indicator_style,
+              position = "statusline"
+            })
+
+            -- Detener el spinner automáticamente después de 2 segundos
+            vim.defer_fn(function()
+              progress.stop_spinner(final_spinner_id, true)
+            end, 2000)
+
+            -- Actualizar el idioma registrado
+            M.state.pr_language = target_language
+          else
+            log.error("Error al actualizar la descripción del PR")
+
+            -- Mostrar un spinner de error en lugar de notificación
+            local error_spinner_id = "translation_error"
+            progress.start_spinner(error_spinner_id, "Error updating PR description", {
+              style = options.get().progress_indicator_style,
+              position = "statusline"
+            })
+
+            -- Detener el spinner con estado de error
+            vim.defer_fn(function()
+              progress.stop_spinner(error_spinner_id, false)
+            end, 2000)
+          end
+        end)
+      end
+    })
+  end)
 end
 
 -- Registrar comando adicional para la versión simplificada
 function M.register_simple_command()
+  local options = require("copilotchatassist.options")
   vim.api.nvim_create_user_command("CopilotSimpleChangePRLanguage", function(opts)
     local target_language = opts.args
     if target_language == "" then

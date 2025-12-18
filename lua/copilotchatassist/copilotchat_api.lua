@@ -60,6 +60,17 @@ function M.ask(message, opts)
       require("copilotchatassist.prompts.system").default
   end
 
+  -- Guardar el contexto para futura referencia
+  -- Esto permite que CopilotChat acceda al contexto más reciente
+  if message and #message > 20 and (message:match("^%-%-[%s]*[%w%s]+[%s]*%-%-") or
+                                   message:match("Project[%s]*[Cc]ontext") or
+                                   message:match("Ticket[%s]*[Ss]ynthesis") or
+                                   message:match("[Rr]equirement[%s]*[Cc]ontext")) then
+    -- Parece ser un contexto de proyecto/ticket - guardarlo globalmente
+    vim.g.copilotchatassist_context = message
+    log.debug("Guardando mensaje como contexto global para CopilotChat (" .. #message .. " bytes)")
+  end
+
   -- Configurar un timeout para evitar bloqueos indefinidos
   local timeout_ms = opts.timeout or 120000 -- 2 minutos por defecto
   local timer = nil
@@ -114,7 +125,8 @@ function M.ask(message, opts)
         timer = nil
       end
 
-      add_to_history(message, response)
+      -- Línea comentada para evitar error al intentar usar add_to_history que ya no existe
+      -- add_to_history(message, response)
 
       -- Proteger contra respuestas malformadas o inexistentes
       if response == nil then
