@@ -291,7 +291,70 @@ function M.setup(opts)
   end
 
   -- Register commands immediately
-  local function create_commands()
+  local function register_jira_commands()
+  -- Jira integration commands
+  vim.api.nvim_create_user_command("CopilotJiraSetup", function()
+    require("copilotchatassist.jira_integration").setup({})
+  end, {
+    desc = "Setup Jira integration"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraConnect", function()
+    require("copilotchatassist.jira_integration").check_connection()
+  end, {
+    desc = "Test connection to Jira"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraTicket", function(opts)
+    require("copilotchatassist.jira_integration").load_ticket_as_context(opts.args)
+  end, {
+    nargs = 1,
+    desc = "Load Jira ticket as context"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraDetect", function()
+    local ticket_id = require("copilotchatassist.jira_integration").detect_ticket_from_branch()
+    if ticket_id then
+      require("copilotchatassist.jira_integration").load_ticket_as_context(ticket_id)
+    end
+  end, {
+    desc = "Detect Jira ticket from current branch"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraComment", function(opts)
+    require("copilotchatassist.jira_integration").add_comment(
+      require("copilotchatassist.jira_integration").state.current_ticket,
+      opts.args
+    )
+  end, {
+    nargs = 1,
+    desc = "Add comment to current Jira ticket"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraTime", function(opts)
+    local args = vim.split(opts.args, " ", { plain = true })
+    local time = args[1]
+    local comment = table.concat(args, " ", 2)
+
+    require("copilotchatassist.jira_integration").log_time(
+      require("copilotchatassist.jira_integration").state.current_ticket,
+      time,
+      comment
+    )
+  end, {
+    nargs = "+",
+    desc = "Log time on current Jira ticket (format: 1h 30m)"
+  })
+
+  vim.api.nvim_create_user_command("CopilotJiraSearch", function(opts)
+    require("copilotchatassist.jira_integration").search_tickets(opts.args)
+  end, {
+    nargs = 1,
+    desc = "Search Jira tickets with JQL"
+  })
+end
+
+local function create_commands()
     register_context_commands()
     register_todo_commands()
     register_pr_commands()
@@ -300,6 +363,7 @@ function M.setup(opts)
     register_code_review_commands()
     register_patches_commands()
     register_log_commands()
+    register_jira_commands()
   end
 
   create_commands()
@@ -326,6 +390,12 @@ function M.setup(opts)
   pcall(function()
     local context_handler = require("copilotchatassist.utils.context_handler")
     context_handler.setup()
+  end)
+
+  -- Inicializar integración con Jira si está configurada
+  pcall(function()
+    local jira = require("copilotchatassist.jira_integration")
+    jira.setup(options.get().jira or {})
   end)
 
   -- Respetar la configuración de log_level en lugar de forzar modo debug
