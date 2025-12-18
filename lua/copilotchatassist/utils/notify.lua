@@ -167,4 +167,25 @@ function M.update(id, message, level, opts)
   return vim.notify(message, level, opts)
 end
 
+-- Limpia todas las notificaciones existentes
+function M.clear()
+  -- Verificamos si nvim-notify está cargado
+  local has_nvim_notify = package.loaded["notify"] ~= nil
+
+  if has_nvim_notify then
+    -- Para nvim-notify
+    pcall(function()
+      require("notify").dismiss()
+    end)
+  end
+
+  -- Intento de limpiar notificaciones estándar de vim
+  pcall(function()
+    vim.cmd('echo ""')
+    vim.cmd('redraw')
+  end)
+
+  log.debug("Limpiando notificaciones existentes")
+end
+
 return M

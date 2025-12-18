@@ -17,7 +17,11 @@
       "Bash(vim -c \"!echo ''Script corrected successfully!''\" -c q /Users/ralbertomerinocolipe/workspaces/personal/nvim/CopilotChatAssist/lua/copilotchatassist/prompts/todo_requests.lua)",
       "Bash(git --version)",
       "Bash(vim -c \"!echo ''''Script corrected successfully!''''\" -c q /Users/ralbertomerinocolipe/workspaces/personal/nvim/CopilotChatAssist/lua/copilotchatassist/utils/progress.lua)",
-      "Read(//Users/ralbertomerinocolipe/.local/share/nvim/lazy/CopilotChat.nvim/lua/CopilotChat/**)"
+      "Read(//Users/ralbertomerinocolipe/.local/share/nvim/lazy/CopilotChat.nvim/lua/CopilotChat/**)",
+      "Read(//tmp/**)",
+      "Bash(xargs ls:*)",
+      "Bash(test:*)",
+      "Read(//Users/ralbertomerinocolipe/**)"
     ],
     "deny": [],
     "ask": []

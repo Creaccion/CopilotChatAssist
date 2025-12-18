@@ -219,74 +219,153 @@ Git Diff:
   return prompt .. diff_content
 end
 
--- Obtener diff del repositorio git actual
-local function get_current_diff()
-  -- Obtener rama actual
-  local cmd_branch = "git branch --show-current"
-  local handle = io.popen(cmd_branch)
-  local current_branch = handle and handle:read("*a"):gsub("%s+$", "") or ""
-  if handle then handle:close() end
+-- Obtener diff del repositorio git actual de forma asíncrona
+local function get_current_diff(callback)
+  -- Callback debe ser una función
+  callback = callback or function(diff) return diff end
 
-  -- Si no pudimos obtener la rama, usar HEAD
-  if not current_branch or current_branch == "" then
-    current_branch = "HEAD"
+  -- Obtener rama actual de forma asíncrona
+  local function get_current_branch(on_branch_result)
+    log.debug("Obteniendo rama actual de forma asíncrona...")
+    local cmd_branch = "git branch --show-current"
+
+    vim.fn.jobstart(cmd_branch, {
+      on_stdout = function(_, data, _)
+        local current_branch = table.concat(data, ""):gsub("%s+$", "")
+        if not current_branch or current_branch == "" then
+          current_branch = "HEAD"
+        end
+        log.debug("Rama actual: " .. current_branch)
+        on_branch_result(current_branch)
+      end,
+      on_stderr = function(_, _, _)
+        log.debug("Error al obtener rama actual, usando HEAD")
+        on_branch_result("HEAD")
+      end,
+      stdout_buffered = true
+    })
   end
 
-  log.debug("Rama actual: " .. current_branch)
+  -- Obtener rama base de forma asíncrona
+  local function get_base_branch(on_base_branch_result)
+    log.debug("Obteniendo rama base de forma asíncrona...")
+    local cmd_remote = "git remote show origin | grep 'HEAD branch' | awk '{print $3}'"
 
-  -- Obtener rama base
-  local base_branch = "main"
-  local cmd_remote = "git remote show origin | grep 'HEAD branch' | awk '{print $3}'"
-  local handle_remote = io.popen(cmd_remote)
-  local remote_branch = handle_remote and handle_remote:read("*a"):gsub("%s+$", "") or ""
-  if handle_remote then handle_remote:close() end
-
-  if remote_branch and remote_branch ~= "" then
-    base_branch = remote_branch
-    log.debug("Rama base detectada: " .. base_branch)
+    vim.fn.jobstart(cmd_remote, {
+      on_stdout = function(_, data, _)
+        local remote_branch = table.concat(data, ""):gsub("%s+$", "")
+        if remote_branch and remote_branch ~= "" then
+          log.debug("Rama base detectada: " .. remote_branch)
+          on_base_branch_result(remote_branch)
+        else
+          log.debug("No se detectó rama base, usando 'main'")
+          on_base_branch_result("main")
+        end
+      end,
+      on_stderr = function(_, _, _)
+        log.debug("Error al obtener rama base, usando 'main'")
+        on_base_branch_result("main")
+      end,
+      stdout_buffered = true
+    })
   end
 
-  -- Primero intentar obtener diff entre la rama actual y la rama base
-  local cmd_branch_diff = string.format("git diff --diff-algorithm=minimal origin/%s...HEAD", base_branch)
-  log.debug("Ejecutando: " .. cmd_branch_diff)
-  local handle_branch_diff = io.popen(cmd_branch_diff)
-  local branch_diff = handle_branch_diff and handle_branch_diff:read("*a") or ""
-  if handle_branch_diff then handle_branch_diff:close() end
+  -- Obtener diff entre ramas de forma asíncrona
+  local function get_branch_diff(base_branch, on_branch_diff_result)
+    local cmd_branch_diff = string.format("git diff --diff-algorithm=minimal origin/%s...HEAD", base_branch)
+    log.debug("Ejecutando: " .. cmd_branch_diff)
 
-  -- Si hay diff entre ramas, usarlo
-  if branch_diff and branch_diff ~= "" then
-    log.debug("Usando diff entre ramas (tamaño: " .. #branch_diff .. " bytes)")
-    return branch_diff
+    vim.fn.jobstart(cmd_branch_diff, {
+      on_stdout = function(_, data, _)
+        local branch_diff = table.concat(data, "\n")
+        if branch_diff and branch_diff ~= "" then
+          log.debug("Usando diff entre ramas (tamaño: " .. #branch_diff .. " bytes)")
+          on_branch_diff_result(branch_diff)
+        else
+          log.debug("No se encontraron diferencias entre ramas, verificando cambios staged...")
+          on_branch_diff_result(nil)
+        end
+      end,
+      on_stderr = function(_, _, _)
+        log.debug("Error al obtener diff entre ramas, verificando cambios staged...")
+        on_branch_diff_result(nil)
+      end,
+      stdout_buffered = true
+    })
   end
 
-  -- Si no hay diff entre ramas, intentar con cambios staged
-  log.debug("No se encontraron diferencias entre ramas, verificando cambios staged...")
-  local cmd = "git diff --cached --diff-algorithm=minimal"
-  log.debug("Ejecutando: " .. cmd)
-  local handle_staged = io.popen(cmd)
-  local staged_diff = handle_staged and handle_staged:read("*a") or ""
-  if handle_staged then handle_staged:close() end
-
-  if not staged_diff or staged_diff == "" then
-    -- Si no hay cambios staged, obtener todos los cambios
-    log.debug("No hay cambios staged, verificando cambios sin staging...")
-    cmd = "git diff --diff-algorithm=minimal"
+  -- Obtener cambios staged de forma asíncrona
+  local function get_staged_diff(on_staged_diff_result)
+    local cmd = "git diff --cached --diff-algorithm=minimal"
     log.debug("Ejecutando: " .. cmd)
-    local handle_unstaged = io.popen(cmd)
-    local diff = handle_unstaged and handle_unstaged:read("*a") or ""
-    if handle_unstaged then handle_unstaged:close() end
 
-    if diff and diff ~= "" then
-      log.debug("Se encontraron cambios sin staging (tamaño: " .. #diff .. " bytes)")
-    else
-      log.debug("No se encontraron cambios en el repositorio")
-    end
-
-    return diff
+    vim.fn.jobstart(cmd, {
+      on_stdout = function(_, data, _)
+        local staged_diff = table.concat(data, "\n")
+        if staged_diff and staged_diff ~= "" then
+          log.debug("Se encontraron cambios staged (tamaño: " .. #staged_diff .. " bytes)")
+          on_staged_diff_result(staged_diff)
+        else
+          log.debug("No hay cambios staged, verificando cambios sin staging...")
+          on_staged_diff_result(nil)
+        end
+      end,
+      on_stderr = function(_, _, _)
+        log.debug("Error al obtener cambios staged, verificando cambios sin staging...")
+        on_staged_diff_result(nil)
+      end,
+      stdout_buffered = true
+    })
   end
 
-  log.debug("Se encontraron cambios staged (tamaño: " .. #staged_diff .. " bytes)")
-  return staged_diff
+  -- Obtener cambios sin staging de forma asíncrona
+  local function get_unstaged_diff(on_unstaged_diff_result)
+    local cmd = "git diff --diff-algorithm=minimal"
+    log.debug("Ejecutando: " .. cmd)
+
+    vim.fn.jobstart(cmd, {
+      on_stdout = function(_, data, _)
+        local diff = table.concat(data, "\n")
+        if diff and diff ~= "" then
+          log.debug("Se encontraron cambios sin staging (tamaño: " .. #diff .. " bytes)")
+          on_unstaged_diff_result(diff)
+        else
+          log.debug("No se encontraron cambios en el repositorio")
+          on_unstaged_diff_result("")
+        end
+      end,
+      on_stderr = function(_, _, _)
+        log.debug("Error al obtener cambios sin staging")
+        on_unstaged_diff_result("")
+      end,
+      stdout_buffered = true
+    })
+  end
+
+  -- Comenzar la cadena de operaciones asíncronas
+  get_current_branch(function(_)
+    get_base_branch(function(base_branch)
+      get_branch_diff(base_branch, function(branch_diff)
+        if branch_diff then
+          -- Si hay diff entre ramas, usarlo directamente
+          callback(branch_diff)
+        else
+          -- Si no hay diff entre ramas, verificar cambios staged
+          get_staged_diff(function(staged_diff)
+            if staged_diff then
+              -- Si hay cambios staged, usarlos
+              callback(staged_diff)
+            else
+              -- Si no hay cambios staged, verificar cambios sin staging
+              get_unstaged_diff(function(unstaged_diff)
+                callback(unstaged_diff or "")
+              end)
+            end
+          end)
+        end
+      end)
+    end)
+  end)
 end
 
 -- Parsear comentarios de la respuesta de CopilotChat
@@ -471,196 +550,207 @@ function M.start_review()
     timeout_timer:close()
   end))
 
-  -- Obtener diff actual
-  log.debug("Obteniendo diff actual...")
-  local diff = get_current_diff()
+  -- Obtener diff actual de forma asíncrona
+  log.debug("Obteniendo diff actual de forma asíncrona...")
+  get_current_diff(function(diff)
+    if not diff or diff == "" then
+      log.warn(i18n.t("code_review.no_changes"))
+      -- Detener spinner con error
+      progress.stop_spinner("code_review", false)
+      M.state.is_processing = false
+      return
+    end
 
-  if not diff or diff == "" then
-    log.warn(i18n.t("code_review.no_changes"))
-    -- Detener spinner con error
-    local progress = require("copilotchatassist.utils.progress")
-    progress.stop_spinner("code_review", false)
-    M.state.is_processing = false
-    return
-  end
+    log.debug("Diff obtenido con éxito. Tamaño: " .. #diff .. " bytes")
 
-  log.debug("Diff obtenido con éxito. Tamaño: " .. #diff .. " bytes")
-
-  -- Guardar diff para depuración
-  local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
-  vim.fn.mkdir(debug_dir, "p")
-  local diff_file = debug_dir .. "/code_review_diff.txt"
-  local diff_debug_file = io.open(diff_file, "w")
-  if diff_debug_file then
-    diff_debug_file:write(diff)
-    diff_debug_file:close()
-    log.debug("Diff guardado para depuración en: " .. diff_file)
-  end
-
-  M.state.last_diff = diff
-
-  -- Guardar info de revisión actual
-  M.state.current_review = {
-    id = tostring(os.time()),
-    started_at = os.time(),
-    updated_at = os.time()
-  }
-
-  -- Generar prompt y enviar a CopilotChat
-  log.debug("Generando prompt para code review...")
-  local prompt = generate_code_review_prompt(diff)
-  log.debug("Longitud del prompt generado: " .. #prompt .. " bytes")
-
-  -- Guardar prompt para depuración
-  local prompt_file = debug_dir .. "/code_review_prompt.txt"
-  local prompt_debug_file = io.open(prompt_file, "w")
-  if prompt_debug_file then
-    prompt_debug_file:write(prompt)
-    prompt_debug_file:close()
-    log.debug("Prompt guardado para depuración en: " .. prompt_file)
-  end
-
-  -- Usar copilot_api para enviar el prompt
-  local current_language = i18n.get_current_language()
-  log.debug("Idioma detectado para code review: " .. current_language)
-  local system_prompt
-
-  if current_language == "spanish" then
-    system_prompt = "Eres un revisor de código experto que genera comentarios estructurados y accionables en el formato JSON exacto solicitado. Tus comentarios deben estar completamente en español, incluyendo todo el contenido dentro del JSON."
-  else
-    system_prompt = "You are an expert code reviewer who generates structured, actionable feedback in the exact JSON format requested. Your comments must be completely in English, including all content within the JSON."
-  end
-
-  -- Notificar inicio de envío
-  vim.notify("[CopilotChatAssist] Enviando solicitud a CopilotChat. Esto puede tomar un momento...", vim.log.levels.INFO)
-
-  log.debug("Enviando solicitud a CopilotChat...")
-  log.debug("Devolviendo todo el texto como código")
-  copilot_api.ask(prompt, {
-    system_prompt = system_prompt,
-    callback = function(response)
-      log.debug("Respuesta recibida de CopilotChat. Tipo de respuesta: " .. type(response))
-      -- Procesar respuesta
-      local content = response
-      if type(response) == "table" and response.content then
-        content = response.content
-      elseif type(response) ~= "string" then
-        log.error(i18n.t("code_review.invalid_response"))
-        -- Detener spinner con error
-        local progress = require("copilotchatassist.utils.progress")
-        progress.stop_spinner("code_review", false)
-        M.state.is_processing = false
-        return
-      end
-
-      -- Guardar respuesta raw para debug
+    -- Guardar diff para depuración de forma asíncrona
+    vim.schedule(function()
       local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
       vim.fn.mkdir(debug_dir, "p")
-      local raw_file = debug_dir .. "/code_review_raw.txt"
-      local raw_debug_file = io.open(raw_file, "w")
-      if raw_debug_file then
-        raw_debug_file:write(content or "")
-        raw_debug_file:close()
-        log.debug(i18n.t("code_review.saved_debug_file", {raw_file}))
-
-        -- Notificar al usuario sobre el archivo de debug
-        vim.notify("[CopilotChatAssist] Respuesta guardada en " .. raw_file, vim.log.levels.INFO)
+      local diff_file = debug_dir .. "/code_review_diff.txt"
+      local diff_debug_file = io.open(diff_file, "w")
+      if diff_debug_file then
+        diff_debug_file:write(diff)
+        diff_debug_file:close()
+        log.debug("Diff guardado para depuración en: " .. diff_file)
       end
+    end)
 
-      -- Mostrar los primeros bytes de la respuesta para diagnosticar problemas
-      if type(content) == "string" then
-        local preview = content:sub(1, 100):gsub("\n", " ")
-        log.debug("Vista previa de respuesta: " .. preview .. "...")
+    M.state.last_diff = diff
 
-        -- Intentar determinar si la respuesta tiene forma de JSON
-        local has_json = content:match("^%s*{") ~= nil or content:match("```json%s*{") ~= nil
-        log.debug("Formato de respuesta probablemente JSON: " .. tostring(has_json))
-      else
-        log.debug("Respuesta no es string, no se puede mostrar vista previa")
+    -- Guardar info de revisión actual
+    M.state.current_review = {
+      id = tostring(os.time()),
+      started_at = os.time(),
+      updated_at = os.time()
+    }
+
+    -- Generar prompt y enviar a CopilotChat
+    log.debug("Generando prompt para code review...")
+    local prompt = generate_code_review_prompt(diff)
+    log.debug("Longitud del prompt generado: " .. #prompt .. " bytes")
+
+    -- Guardar prompt para depuración de forma asíncrona
+    vim.schedule(function()
+      local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+      vim.fn.mkdir(debug_dir, "p")
+      local prompt_file = debug_dir .. "/code_review_prompt.txt"
+      local prompt_debug_file = io.open(prompt_file, "w")
+      if prompt_debug_file then
+        prompt_debug_file:write(prompt)
+        prompt_debug_file:close()
+        log.debug("Prompt guardado para depuración en: " .. prompt_file)
       end
+    end)
 
-      -- Parsear comentarios
-      local comments = parse_comments(content)
+    -- Usar copilot_api para enviar el prompt
+    local current_language = i18n.get_current_language()
+    log.debug("Idioma detectado para code review: " .. current_language)
+    local system_prompt
 
-      if #comments == 0 then
-        log.warn(i18n.t("code_review.no_comments_found"))
-        vim.notify("[CopilotChatAssist] No se encontraron comentarios en el Code Review. " ..
-                  "Esto puede deberse a un error en el formato de la respuesta. " ..
-                  "Verifica el archivo de log y ejecuta :messages para más detalles.", vim.log.levels.WARN)
+    if current_language == "spanish" then
+      system_prompt = "Eres un revisor de código experto que genera comentarios estructurados y accionables en el formato JSON exacto solicitado. Tus comentarios deben estar completamente en español, incluyendo todo el contenido dentro del JSON."
+    else
+      system_prompt = "You are an expert code reviewer who generates structured, actionable feedback in the exact JSON format requested. Your comments must be completely in English, including all content within the JSON."
+    end
 
-        -- Crear un log especial con la respuesta formateada para facilitar el diagnóstico
-        local formatted_file = debug_dir .. "/code_review_formatted.txt"
-        local f = io.open(formatted_file, "w")
-        if f and type(content) == "string" then
-          -- Intentar formatear el contenido para facilitar diagnóstico
-          local formatted = content:gsub("```json", "\n---JSON BLOCK START---\n"):gsub("```", "\n---JSON BLOCK END---\n")
-          f:write("RESPUESTA FORMATEADA PARA DIAGNÓSTICO:\n\n")
-          f:write(formatted)
-          f:close()
-          log.debug("Respuesta formateada guardada en " .. formatted_file)
-          vim.notify("[CopilotChatAssist] Respuesta formateada guardada en " .. formatted_file, vim.log.levels.INFO)
+    -- Notificar inicio de envío
+    vim.notify("[CopilotChatAssist] Enviando solicitud a CopilotChat. Esto puede tomar un momento...", vim.log.levels.INFO)
+
+    log.debug("Enviando solicitud a CopilotChat...")
+    log.debug("Devolviendo todo el texto como código")
+    copilot_api.ask(prompt, {
+      system_prompt = system_prompt,
+      callback = function(response)
+        log.debug("Respuesta recibida de CopilotChat. Tipo de respuesta: " .. type(response))
+        -- Procesar respuesta
+        local content = response
+        if type(response) == "table" and response.content then
+          content = response.content
+        elseif type(response) ~= "string" then
+          log.error(i18n.t("code_review.invalid_response"))
+          -- Detener spinner con error
+          progress.stop_spinner("code_review", false)
+          M.state.is_processing = false
+          return
         end
 
-        -- Detener spinner con estado neutro
-        local progress = require("copilotchatassist.utils.progress")
-        progress.stop_spinner("code_review", false) -- Cambio a false para indicar error
-        M.state.is_processing = false
-        return
+        -- Guardar respuesta raw para debug de forma asíncrona
+        vim.schedule(function()
+          local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+          vim.fn.mkdir(debug_dir, "p")
+          local raw_file = debug_dir .. "/code_review_raw.txt"
+          local raw_debug_file = io.open(raw_file, "w")
+          if raw_debug_file then
+            raw_debug_file:write(content or "")
+            raw_debug_file:close()
+            log.debug(i18n.t("code_review.saved_debug_file", {raw_file}))
+
+            -- Notificar al usuario sobre el archivo de debug
+            vim.notify("[CopilotChatAssist] Respuesta guardada en " .. raw_file, vim.log.levels.INFO)
+          end
+        end)
+
+        -- Mostrar los primeros bytes de la respuesta para diagnosticar problemas
+        if type(content) == "string" then
+          local preview = content:sub(1, 100):gsub("\n", " ")
+          log.debug("Vista previa de respuesta: " .. preview .. "...")
+
+          -- Intentar determinar si la respuesta tiene forma de JSON
+          local has_json = content:match("^%s*{") ~= nil or content:match("```json%s*{") ~= nil
+          log.debug("Formato de respuesta probablemente JSON: " .. tostring(has_json))
+        else
+          log.debug("Respuesta no es string, no se puede mostrar vista previa")
+        end
+
+        -- Parsear comentarios de forma asíncrona
+        vim.schedule(function()
+          local comments = parse_comments(content)
+
+          if #comments == 0 then
+            log.warn(i18n.t("code_review.no_comments_found"))
+            vim.notify("[CopilotChatAssist] No se encontraron comentarios en el Code Review. " ..
+                      "Esto puede deberse a un error en el formato de la respuesta. " ..
+                      "Verifica el archivo de log y ejecuta :messages para más detalles.", vim.log.levels.WARN)
+
+            -- Crear un log especial con la respuesta formateada para facilitar el diagnóstico
+            vim.schedule(function()
+              local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+              local formatted_file = debug_dir .. "/code_review_formatted.txt"
+              local f = io.open(formatted_file, "w")
+              if f and type(content) == "string" then
+                -- Intentar formatear el contenido para facilitar diagnóstico
+                local formatted = content:gsub("```json", "\n---JSON BLOCK START---\n"):gsub("```", "\n---JSON BLOCK END---\n")
+                f:write("RESPUESTA FORMATEADA PARA DIAGNÓSTICO:\n\n")
+                f:write(formatted)
+                f:close()
+                log.debug("Respuesta formateada guardada en " .. formatted_file)
+                vim.notify("[CopilotChatAssist] Respuesta formateada guardada en " .. formatted_file, vim.log.levels.INFO)
+              end
+            end)
+
+            -- Detener spinner con estado neutro
+            progress.stop_spinner("code_review", false) -- Cambio a false para indicar error
+            M.state.is_processing = false
+            return
+          end
+
+          log.info(i18n.t("code_review.found_comments", {#comments}))
+
+          -- Añadir comentarios a la revisión
+          M.state.review_comments = {}
+          for _, comment_data in ipairs(comments) do
+            M.create_comment(comment_data)
+          end
+
+          -- Cargar módulos necesarios - IMPORTANTE: Los cargamos solo una vez y guardamos las referencias
+          -- Evitar cargar módulos múltiples veces puede prevenir callbacks adicionales
+          local analyzer_module = M.analyzer_module
+          local storage_module = M.storage_module
+          local window_module = M.window_module
+
+          -- Si no tenemos los módulos cargados aún, cargarlos ahora
+          if not analyzer_module or not storage_module or not window_module then
+            analyzer_module, storage_module, window_module = load_modules()
+            -- Guardar referencias para evitar cargas múltiples
+            M.analyzer_module = analyzer_module
+            M.storage_module = storage_module
+            M.window_module = window_module
+          end
+
+          -- Guardar revisión de forma asíncrona
+          vim.schedule(function()
+            if storage_module then
+              storage_module.save_review(M.state.current_review, M.state.review_comments)
+            end
+
+            -- Mostrar resultados
+            if window_module then
+              window_module.show_review_window(M.state.review_comments)
+            end
+
+            -- Mostrar spinner de éxito
+            progress.stop_spinner("code_review", true)
+
+            -- Iniciar un spinner final que muestre el resultado
+            local complete_spinner_id = "code_review_complete"
+            progress.start_spinner(complete_spinner_id, i18n.t("code_review.review_completed", {#comments}), {
+              style = options.get().progress_indicator_style,
+              position = "statusline"
+            })
+
+            -- Detener el spinner de completado después de 2 segundos
+            vim.defer_fn(function()
+              progress.stop_spinner(complete_spinner_id, true)
+            end, 2000)
+
+            -- Marcar como completado
+            M.state.is_processing = false
+          end)
+        end)
       end
-
-      log.info(i18n.t("code_review.found_comments", {#comments}))
-
-      -- Añadir comentarios a la revisión
-      M.state.review_comments = {}
-      for _, comment_data in ipairs(comments) do
-        M.create_comment(comment_data)
-      end
-
-      -- Cargar módulos necesarios - IMPORTANTE: Los cargamos solo una vez y guardamos las referencias
-      -- Evitar cargar módulos múltiples veces puede prevenir callbacks adicionales
-      local analyzer_module = M.analyzer_module
-      local storage_module = M.storage_module
-      local window_module = M.window_module
-
-      -- Si no tenemos los módulos cargados aún, cargarlos ahora
-      if not analyzer_module or not storage_module or not window_module then
-        analyzer_module, storage_module, window_module = load_modules()
-        -- Guardar referencias para evitar cargas múltiples
-        M.analyzer_module = analyzer_module
-        M.storage_module = storage_module
-        M.window_module = window_module
-      end
-
-      -- Guardar revisión
-      if storage_module then
-        storage_module.save_review(M.state.current_review, M.state.review_comments)
-      end
-
-      -- Mostrar resultados
-      if window_module then
-        window_module.show_review_window(M.state.review_comments)
-      end
-
-      -- Mostrar spinner de éxito
-      local progress = require("copilotchatassist.utils.progress")
-      progress.stop_spinner("code_review", true)
-
-      -- Iniciar un spinner final que muestre el resultado
-      local complete_spinner_id = "code_review_complete"
-      progress.start_spinner(complete_spinner_id, i18n.t("code_review.review_completed", {#comments}), {
-        style = options.get().progress_indicator_style,
-        position = "statusline"
-      })
-
-      -- Detener el spinner de completado después de 2 segundos
-      vim.defer_fn(function()
-        progress.stop_spinner(complete_spinner_id, true)
-      end, 2000)
-
-      -- Marcar como completado
-      M.state.is_processing = false
-    end
-  })
+    })
+  end)
 end
 
 -- Mostrar comentarios de la revisión actual
@@ -843,48 +933,70 @@ function M.update_comment_status(comment_id, new_status)
   return false
 end
 
--- Re-analizar un diff y actualizar comentarios
+-- Re-analizar un diff y actualizar comentarios de forma asíncrona
 function M.reanalyze_diff()
-  -- Obtener diff actual
-  local diff = get_current_diff()
+  -- Iniciar spinner de progreso
+  local progress = require("copilotchatassist.utils.progress")
+  local spinner_id = "code_review_reanalyze"
+  progress.start_spinner(spinner_id, i18n.t("code_review.reanalyzing_diff"), {
+    style = options.get().progress_indicator_style,
+    position = "statusline"
+  })
 
-  if not diff or diff == "" then
-    log.warn(i18n.t("code_review.no_changes"))
-    vim.notify(i18n.t("code_review.no_changes"), vim.log.levels.WARN)
-    return
-  end
-
-  M.state.last_diff = diff
-
-  -- Cargar el analizador
-  local analyzer_module = load_modules()
-
-  if analyzer_module then
-    local updated_comments = analyzer_module.analyze_diff_changes(diff, M.state.review_comments)
-
-    if updated_comments then
-      M.state.review_comments = updated_comments
-
-      -- Actualizar timestamp
-      if M.state.current_review then
-        M.state.current_review.updated_at = os.time()
-      end
-
-      -- Guardar cambios
-      local _, storage_module = load_modules()
-      if storage_module then
-        storage_module.save_review(M.state.current_review, M.state.review_comments)
-      end
-
-      -- Actualizar ventana si está abierta
-      local _, _, window_module = load_modules()
-      if window_module then
-        window_module.refresh_window(M.state.review_comments)
-      end
-
-      vim.notify(i18n.t("code_review.reanalysis_complete"), vim.log.levels.INFO)
+  -- Obtener diff actual de forma asíncrona
+  get_current_diff(function(diff)
+    if not diff or diff == "" then
+      log.warn(i18n.t("code_review.no_changes"))
+      vim.notify(i18n.t("code_review.no_changes"), vim.log.levels.WARN)
+      progress.stop_spinner(spinner_id, false)
+      return
     end
-  end
+
+    M.state.last_diff = diff
+
+    -- Cargar el analizador de forma asíncrona
+    vim.schedule(function()
+      local analyzer_module = load_modules()
+
+      if analyzer_module then
+        -- Ejecutar el análisis en un contexto programado para evitar bloqueos
+        vim.schedule(function()
+          local updated_comments = analyzer_module.analyze_diff_changes(diff, M.state.review_comments)
+
+          if updated_comments then
+            M.state.review_comments = updated_comments
+
+            -- Actualizar timestamp
+            if M.state.current_review then
+              M.state.current_review.updated_at = os.time()
+            end
+
+            -- Guardar cambios de forma asíncrona
+            vim.schedule(function()
+              local _, storage_module = load_modules()
+              if storage_module then
+                storage_module.save_review(M.state.current_review, M.state.review_comments)
+              end
+
+              -- Actualizar ventana si está abierta
+              local _, _, window_module = load_modules()
+              if window_module then
+                window_module.refresh_window(M.state.review_comments)
+              end
+
+              -- Indicar éxito
+              progress.stop_spinner(spinner_id, true)
+              vim.notify(i18n.t("code_review.reanalysis_complete"), vim.log.levels.INFO)
+            end)
+          else
+            progress.stop_spinner(spinner_id, false)
+          end
+        end)
+      else
+        progress.stop_spinner(spinner_id, false)
+      end
+    end)
+  end)
 end
 
 -- Reiniciar/limpiar la revisión actual
