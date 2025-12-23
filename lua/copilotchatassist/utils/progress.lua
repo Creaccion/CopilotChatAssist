@@ -43,6 +43,11 @@ function M.is_active(id)
   return active_spinners[id] ~= nil
 end
 
+-- Alias más descriptivo para verificar si un spinner está activo
+function M.is_spinner_active(id)
+  return active_spinners[id] ~= nil
+end
+
 -- Inicializar el namespace para los spinners si no existe
 local function ensure_namespace()
   if not spinner_namespace then

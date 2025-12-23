@@ -6,6 +6,7 @@ local M = {
   temperature = 0.1,
   log_level = vim.log.levels.INFO,
   language = "english",
+  pr_language = "spanish",  -- Lenguaje específico para las descripciones de los PRs
   code_language = "english",
   todo_split_orientation = "vertical",
   todo_split_width = 50,
@@ -20,6 +21,9 @@ local M = {
   silent_mode = false,                            -- Si es true, reduce el número de notificaciones
   use_progress_indicator = true,                  -- Si es true, muestra indicadores de progreso para operaciones largas
   progress_indicator_style = "dots",              -- Estilo del spinner: dots, line, braille, circle, moon, arrow, bar
+  copilot_force_preview = false,                  -- Si es true, fuerza la creación de vista previa incluso en entornos no ideales
+  copilot_debug_buffer = false,                   -- Si es true, habilita logs adicionales para la creación de buffers
+  pr_use_temp_file = true,                       -- Si es true, usa archivos temporales para editar descripciones de PR
 }
 
 -- Default highlight groups for TODO priorities (can be overridden by user)

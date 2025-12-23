@@ -4,6 +4,7 @@
 local options = require("copilotchatassist.options")
 local log = require("copilotchatassist.utils.log")
 local string_utils = require("copilotchatassist.utils.string")
+local response_validator = require("copilotchatassist.utils.response_validator")
 
 local M = {}
 
@@ -114,9 +115,21 @@ function M.ask(message, opts)
     -- No mostrar mensaje de debug sobre guardar prompt
   end
 
-  -- Wrap the original callback to process patches
+  -- Wrap the original callback to process patches and validate responses
   local original_callback = opts.callback
   if opts.callback and type(opts.callback) == "function" then
+    -- Registrar la operación con el gestor de estado (si está disponible)
+    local operation_id = nil
+    local operation = nil
+    local state_manager = nil
+
+    pcall(function()
+      state_manager = require("copilotchatassist.utils.state_manager")
+      operation = state_manager.start_operation("copilot_api_call")
+      operation_id = operation.id
+      log.debug("Operación registrada con ID: " .. operation_id)
+    end)
+
     opts.callback = function(response)
       -- Cancelar el timer de timeout si existe
       if timer then
@@ -125,26 +138,91 @@ function M.ask(message, opts)
         timer = nil
       end
 
-      -- Línea comentada para evitar error al intentar usar add_to_history que ya no existe
-      -- add_to_history(message, response)
+      -- Verificar si la operación sigue siendo válida
+      local is_operation_valid = true
+      if operation and state_manager then
+        is_operation_valid = operation:is_current()
+        if not is_operation_valid then
+          log.warn("Operación " .. operation_id .. " ya no es la actual, respuesta ignorada")
+          return
+        end
+      end
 
       -- Proteger contra respuestas malformadas o inexistentes
       if response == nil then
         log.error("No se recibió respuesta de CopilotChat (timeout o error interno)")
-        original_callback(nil)  -- Pasar nil para indicar error
+        if original_callback then
+          original_callback(nil)  -- Pasar nil para indicar error
+        else
+          log.error("Error crítico: callback es nil en el momento de procesar la respuesta")
+        end
+
+        -- Completar operación si está disponible el gestor de estado
+        if operation then
+          operation:complete()
+        end
+
         return
       end
 
-      -- Ejecutar callback original protegido solo si no es nil
-      -- Esto evita callbacks cíclicos y dobles ejecuciones
+      -- Registrar información sobre la respuesta recibida
+      log.debug("Tipo de respuesta recibida de CopilotChat: " .. type(response))
+
+      -- Si es una tabla, intentar ver su estructura
+      if type(response) == "table" then
+        local table_info = ""
+        pcall(function()
+          table_info = vim.inspect(response):sub(1, 100) .. "..."
+        end)
+        log.debug("Estructura de la respuesta (parcial): " .. table_info)
+
+        -- Guardar la respuesta para diagnóstico
+        local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+        vim.fn.mkdir(debug_dir, "p")
+        local debug_file = debug_dir .. "/api_response.txt"
+        local file = io.open(debug_file, "w")
+        if file then
+          file:write(vim.inspect(response))
+          file:close()
+          log.debug("Respuesta guardada en: " .. debug_file)
+        end
+      end
+
+      -- Validar la respuesta antes de ejecutar el callback original
+      -- Esto evita problemas con respuestas malformadas o vacías
+      local validated_response = nil
+
       if response ~= nil then
+        -- Intentar validar y procesar la respuesta
+        log.debug("Validando respuesta de CopilotChat")
+        validated_response = response_validator.process_response(response, 10) -- Mínimo 10 caracteres
+
+        -- Guardar información de diagnóstico
+        local debug_dir = vim.fn.stdpath("cache") .. "/copilotchatassist"
+        vim.fn.mkdir(debug_dir, "p")
+        local debug_file = debug_dir .. "/callback_response_validation.txt"
+        local file = io.open(debug_file, "w")
+        if file then
+          file:write("Tipo de respuesta: " .. type(response) .. "\n")
+          file:write("Respuesta validada: " .. (validated_response and "OK (" .. #validated_response .. " caracteres)" or "NULL") .. "\n")
+          file:write("Timestamp: " .. os.date("%Y-%m-%d %H:%M:%S") .. "\n")
+          file:close()
+          log.debug("Resultados de validación guardados en: " .. debug_file)
+        end
+      else
+        log.error("Respuesta nil recibida de CopilotChat")
+      end
+
+      -- Ejecutar callback original solo si la respuesta es válida
+      if validated_response then
         -- Flag para evitar múltiples callbacks
         local callback_executed = false
 
         local status, error_msg = pcall(function()
           if not callback_executed then
             callback_executed = true
-            original_callback(response)
+            log.debug("Ejecutando callback con respuesta validada, longitud: " .. #validated_response)
+            original_callback(validated_response)
           else
             log.debug("Callback ya ejecutado previamente, ignorando llamada adicional")
           end
@@ -155,13 +233,8 @@ function M.ask(message, opts)
           -- NO intentamos llamar de nuevo con nil para evitar ciclos
         end
       else
-        log.error("Ignorando callback con respuesta nil para evitar ciclos")
+        log.error("No se pudo obtener una respuesta válida de CopilotChat, no se ejecutará el callback")
       end
-    end
-
-    -- Call the original callback if provided
-    if original_callback then
-      original_callback(response)
     end
   end
 

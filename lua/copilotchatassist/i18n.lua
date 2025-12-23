@@ -523,34 +523,71 @@ end
 -- @return string: Código del idioma detectado
 function M.detect_language(text)
   if not text or text == "" then
-    return M.get_current_language()
+    local configured_lang = M.get_current_language()
+    log.debug("Texto vacío, usando idioma configurado: " .. configured_lang)
+    return configured_lang
   end
 
-  -- Una implementación básica que cuenta palabras específicas de cada idioma
-  local spanish_words = {"de", "la", "el", "en", "para", "con", "por", "los", "las", "un", "una", "que", "es", "se"}
-  local english_words = {"the", "of", "to", "in", "is", "are", "and", "for", "with", "this", "that", "from", "it"}
+  -- Solo analizar un fragmento del texto para ser más eficientes
+  local sample = text
+  if #text > 1000 then
+    sample = text:sub(1, 1000)
+    log.debug("Texto demasiado largo, analizando una muestra de 1000 caracteres")
+  end
+
+  -- Una implementación más robusta que cuenta palabras específicas de cada idioma
+  -- Incluimos más palabras y algunas frases comunes
+  local spanish_words = {
+    "de", "la", "el", "en", "para", "con", "por", "los", "las", "un", "una", "que", "es", "se",
+    "esto", "esta", "estos", "estas", "como", "cuando", "donde", "porque", "también", "más",
+    "menos", "muy", "mucho", "poco", "así", "desde", "hasta", "sobre", "entre", "según", "sin"
+  }
+
+  local english_words = {
+    "the", "of", "to", "in", "is", "are", "and", "for", "with", "this", "that", "from", "it",
+    "was", "be", "been", "have", "has", "had", "do", "does", "did", "but", "by", "at", "on",
+    "not", "what", "all", "were", "when", "where", "there", "how", "which", "their", "will"
+  }
 
   local spanish_count = 0
   local english_count = 0
 
   -- Convertir texto a minúsculas para la comparación
-  local lower_text = text:lower()
+  local lower_text = sample:lower()
 
-  -- Contar palabras en español
+  -- Contar palabras en español (con peso 2 para mayor precisión)
   for _, word in ipairs(spanish_words) do
     for _ in string.gmatch(lower_text, "%f[%a]" .. word .. "%f[%A]") do
-      spanish_count = spanish_count + 1
+      spanish_count = spanish_count + 2
     end
   end
 
-  -- Contar palabras en inglés
+  -- Contar palabras en inglés (con peso 2 para mayor precisión)
   for _, word in ipairs(english_words) do
     for _ in string.gmatch(lower_text, "%f[%a]" .. word .. "%f[%A]") do
-      english_count = english_count + 1
+      english_count = english_count + 2
     end
   end
 
-  -- Decidir el idioma basado en la mayor cantidad de palabras detectadas
+  -- Buscar frases comunes en español (con peso 3 para mayor precisión)
+  local spanish_phrases = {"de la", "en el", "por lo", "para que", "con los", "que se", "lo que"}
+  for _, phrase in ipairs(spanish_phrases) do
+    for _ in string.gmatch(lower_text, phrase) do
+      spanish_count = spanish_count + 3
+    end
+  end
+
+  -- Buscar frases comunes en inglés (con peso 3 para mayor precisión)
+  local english_phrases = {"of the", "in the", "for the", "to be", "will be", "it is", "there are"}
+  for _, phrase in ipairs(english_phrases) do
+    for _ in string.gmatch(lower_text, phrase) do
+      english_count = english_count + 3
+    end
+  end
+
+  -- Decidir el idioma basado en el recuento
+  log.debug("Detección de idioma - Español: " .. spanish_count .. ", Inglés: " .. english_count)
+
   if spanish_count > english_count then
     return "spanish"
   else
