@@ -201,6 +201,49 @@ function M.continue_with_normal_context(requirement, ticket_synthesis, project_s
   end)
 end
 
+function M.copilot_tickets()
+  local paths = M.get_context_paths()
+  local requirement = file_utils.read_file(paths.requirement)
+  local ticket_synthesis = file_utils.read_file(paths.synthesis)
+  local project_synthesis = file_utils.read_file(paths.project_context)
+
+  -- Si no hay ningún archivo de contexto, requerimiento o proyecto, preguntar antes de generar
+  local no_context_files = not (requirement and #requirement > 10)
+    and not (ticket_synthesis and #ticket_synthesis > 10)
+    and not (project_synthesis and #project_synthesis > 10)
+
+  if no_context_files then
+    vim.ui.select({ "Sí", "No" }, {
+      prompt = "¿Desea crear el contexto y los archivos requeridos para este ticket/proyecto?",
+    }, function(choice)
+      if choice == "Sí" then
+        -- Continuar con el flujo normal
+        if not (requirement and #requirement > 10) then
+          local branch = utils.get_current_branch()
+          local ticket = branch:match("^([A-Z]+%-%d+)")
+          if ticket then
+            local jira_url = "https://pagerduty.atlassian.net/browse/" .. ticket
+            vim.fn.jobstart({ "open", jira_url }, { detach = true })
+            vim.notify("Jira ticket detected: " .. ticket .. ". Paste the requirement from Jira in the buffer.",
+              vim.log.levels.INFO)
+          else
+            -- Fallback al método anterior si CopilotChat no está disponible
+            notify.info(i18n.t("context.context_loaded_combined"))
+            copilot_api.ask(full_context)
+          end
+          return
+        end
+
+        local i18n = require("copilotchatassist.i18n")
+        local notify = require("copilotchatassist.utils.notify")
+        notify.warn(i18n.t("context.no_context_files"), {force = true})
+      end
+
+      combine_contexts()
+    end)
+  end)
+end
+
 -- Intenta extraer la ruta de un archivo solicitado del mensaje actual de Copilot
 function M.try_autodetect_requested_file()
   local log = require("copilotchatassist.utils.log")
